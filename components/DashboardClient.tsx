@@ -1,31 +1,40 @@
 "use client";
 
-import {
-    RedirectToSignIn,
-    useAuth,
-} from "@clerk/nextjs";
-import { useState } from "react";
+import { RedirectToSignIn, useAuth } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useSearchParams } from "next/navigation";
 import AdminDashboard from "./AdminDashboard";
 import FacultyDashboard from "./FacultyDashboard";
 import StudentDashboard from "./StudentDashboard";
-import SyncUser from "./SyncUser";
 
 type RoleView = "student" | "faculty" | "admin";
 
-export default function DashboardClient() {
-    const [role, setRole] = useState<RoleView>("student");
-    const { isLoaded, isSignedIn } = useAuth();
+function toRoleView(role: unknown): RoleView {
+    if (role === "student" || role === "faculty" || role === "admin") {
+        return role;
+    }
 
-    const roleButtonClass = (currentRole: RoleView) =>
-        `rounded-lg px-3 py-2 text-xs font-semibold transition-all ${role === currentRole
-            ? "bg-rose-600 text-white"
-            : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-        }`;
+    return "student";
+}
+
+function getWorkspaceOverride(value: string | null): RoleView | null {
+    if (value === "student" || value === "faculty" || value === "admin") {
+        return value;
+    }
+
+    return null;
+}
+
+export default function DashboardClient() {
+    const { isLoaded, isSignedIn } = useAuth();
+    const searchParams = useSearchParams();
+    const currentUser = useQuery(api.users.getCurrentUser, isLoaded && isSignedIn ? {} : "skip");
 
     if (!isLoaded) {
         return (
             <main className="flex min-h-screen items-center justify-center p-6">
-                <p className="text-sm text-slate-300">Loading dashboard...</p>
+                <p className="text-sm text-zinc-300">Loading authentication...</p>
             </main>
         );
     }
@@ -34,34 +43,24 @@ export default function DashboardClient() {
         return <RedirectToSignIn />;
     }
 
-    return (
-        <>
-                <SyncUser />
-                <div className="fixed right-4 top-4 z-60 flex items-center gap-2 rounded-xl bg-slate-900/90 p-2 shadow ring-1 ring-slate-700 backdrop-blur">
-                    <button
-                        className={roleButtonClass("student")}
-                        onClick={() => setRole("student")}
-                    >
-                        Student
-                    </button>
-                    <button
-                        className={roleButtonClass("faculty")}
-                        onClick={() => setRole("faculty")}
-                    >
-                        Faculty
-                    </button>
-                    <button className={roleButtonClass("admin")} onClick={() => setRole("admin")}>
-                        Admin
-                    </button>
-                </div>
+    if (currentUser === undefined) {
+        return (
+            <main className="flex min-h-screen items-center justify-center p-6">
+                <p className="text-sm text-zinc-300">Loading dashboard...</p>
+            </main>
+        );
+    }
 
-                {role === "student" ? (
-                    <StudentDashboard />
-                ) : role === "faculty" ? (
-                    <FacultyDashboard />
-                ) : (
-                    <AdminDashboard />
-                )}
-        </>
+    const role = toRoleView(currentUser.role);
+    const workspaceOverride = getWorkspaceOverride(searchParams.get("workspace"));
+    const activeWorkspace = role === "admin" ? (workspaceOverride ?? "admin") : role;
+    const viewerName = currentUser.fullName ?? currentUser.email ?? "MUniverse User";
+
+    return activeWorkspace === "student" ? (
+        <StudentDashboard viewerName={viewerName} />
+    ) : activeWorkspace === "faculty" ? (
+        <FacultyDashboard viewerName={viewerName} />
+    ) : (
+        <AdminDashboard viewerName={viewerName} />
     );
 }
