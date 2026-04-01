@@ -91,7 +91,7 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
             <Link href="/" className="font-display text-2xl font-semibold text-white">
               MUniverse
             </Link>
-            <p className="mt-1 text-xs font-medium uppercase tracking-[0.1em] text-zinc-400">
+            <p className="mt-1 text-xs font-medium uppercase tracking-widest text-zinc-400">
               Mahindra University Portal
             </p>
           </header>
@@ -117,7 +117,7 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
           </nav>
 
           <section className="surface-card-muted mt-auto p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.1em] text-zinc-400">Signed in as</p>
+            <p className="text-xs font-medium uppercase tracking-widest text-zinc-400">Signed in as</p>
             <div className="mt-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-sm font-semibold text-white">
                 {userInitials}

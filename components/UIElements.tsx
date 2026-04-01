@@ -53,7 +53,7 @@ export function FormInput({ label, className, ...props }: FormInputProps) {
   return (
     <div className="flex w-full flex-col space-y-1">
       {label ? (
-        <label className="text-xs font-semibold uppercase tracking-[0.1em] text-zinc-400">
+        <label className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
           {label}
         </label>
       ) : null}
