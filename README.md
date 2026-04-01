@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MUniverse
 
-## Getting Started
+## Quick start
 
-First, run the development server:
+1. Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Start Convex codegen and backend sync (keep running):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm convex dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Start Next.js in another terminal:
 
-## Learn More
+```bash
+pnpm dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+4. Open:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- http://localhost:3000
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Backend modules
 
-## Deploy on Vercel
+- User auth and profile sync: convex/users.ts
+- Shared auth helper: convex/lib/auth.ts
+- Shared role-based access helper: convex/lib/rbac.ts
+- Announcement APIs: convex/announcements.ts
+- Schema: convex/schema.ts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Announcements API summary
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- createAnnouncement: allowed roles are admin and faculty; validates title/content and targetRoles; sets authorId from authenticated user only; creates notifications for matching target roles.
+- getAnnouncements: returns announcements filtered by current user role, sorted latest first by announcements.by_updatedAt; includes isRead and readAt metadata.
+- markAnnouncementRead: uses announcementReads.by_user_announcement for efficient lookup; handles concurrent requests by canonicalizing duplicate read rows.
+- deleteAnnouncement: admin-only; deletes related announcementReads and related announcement notifications.
+
+## Key indexes
+
+- announcements.by_updatedAt
+- announcements.by_authorId
+- announcementReads.by_user
+- announcementReads.by_announcement
+- announcementReads.by_user_announcement
+
+## Testing
+
+Run all tests:
+
+```bash
+pnpm test
+```
+
+Watch mode:
+
+```bash
+pnpm test:watch
+```
+
+Current backend tests are under tests/convex and cover:
+
+- Auth helper behavior
+- RBAC helper behavior
+- Announcement API happy paths and authorization failures
+- Concurrent markAnnouncementRead calls for the same user-announcement pair
+
+## Notes
+
+- Keep pnpm convex dev running while editing Convex schema/functions.
+- See IMPLEMENTATION.md for the detailed architecture and implementation flow.
+
+## Design tokens (UI)
+
+Monochrome, high-contrast baseline used across all pages:
+
+- `--canvas`: `#ffffff`
+- `--surface`: `#ffffff`
+- `--surface-muted`: `#fafafa`
+- `--border`: `#e5e7eb`
+- `--text`: `#111111`
+- `--muted`: `#525252`
+
+Shared utility classes in `app/globals.css`:
+
+- `.surface-card`: rounded white panel with border
+- `.surface-card-muted`: muted panel variant
+- `.section-kicker`: small uppercase section label
+
+Layout rules for consistency:
+
+- Every top-level page uses `min-h-screen`.
+- Auth and dashboard screens are full viewport height.
+- Content surfaces must have explicit backgrounds (avoid transparent cards).
+- Primary actions use near-black fill with white text; secondary actions are bordered white buttons.

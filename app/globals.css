@@ -2,6 +2,12 @@
 
 :root {
   color-scheme: dark;
+  --canvas: #050505;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.18);
+  --text: #f5f5f5;
+  --muted: #b3b3b3;
 }
 
 html,
@@ -9,9 +15,115 @@ body {
   height: 100%;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  background-color: #020617;
-  color: #e2e8f0;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: var(--canvas);
+  color: var(--text);
+  font-family:
+    var(--font-body),
+    "Public Sans",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family:
+    var(--font-display),
+    "Archivo",
+    "Public Sans",
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.surface-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background-color: var(--surface);
+}
+
+.surface-card-muted {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background-color: var(--surface-muted);
+}
+
+.section-kicker {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+a,
+button,
+select,
+summary,
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+textarea {
+  cursor: text;
+}
+
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-enter {
+  animation: enter-up 320ms ease-out both;
+}
+
+.motion-enter-delay-1 {
+  animation-delay: 80ms;
+}
+
+.motion-enter-delay-2 {
+  animation-delay: 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-enter,
+  .motion-enter-delay-1,
+  .motion-enter-delay-2 {
+    animation: none !important;
+  }
 }
