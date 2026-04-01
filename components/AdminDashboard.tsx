@@ -383,73 +383,73 @@ export default function AdminDashboard({ viewerName }: AdminDashboardProps) {
             <>
               <ul className="mt-5 space-y-3">
                 {paginatedUsers.map((user) => {
-                const draftRole = roleDrafts[user._id] ?? user.role;
-                const isBusy = isSavingRole === user._id;
-                const isProtectedAdminSelf = user.isCurrentAdmin && user.role === "admin";
+                  const draftRole = roleDrafts[user._id] ?? user.role;
+                  const isBusy = isSavingRole === user._id;
+                  const isProtectedAdminSelf = user.isCurrentAdmin && user.role === "admin";
 
-                return (
-                  <li
-                    key={user._id}
-                    className="rounded-lg border border-white/15 bg-white/5 p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <p className="truncate text-sm font-semibold text-white">{user.fullName}</p>
-                        <p className="truncate text-xs text-zinc-400">
-                          {user.email ?? "Email not available"}
-                        </p>
-                        <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.08em]">
-                          <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-zinc-200">
-                            {user.role}
-                          </span>
-                          {user.isCurrentAdmin ? (
-                            <span className="rounded-full border border-white/30 bg-white/16 px-2 py-0.5 text-white">
-                              You
+                  return (
+                    <li
+                      key={user._id}
+                      className="rounded-lg border border-white/15 bg-white/5 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-sm font-semibold text-white">{user.fullName}</p>
+                          <p className="truncate text-xs text-zinc-400">
+                            {user.email ?? "Email not available"}
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.08em]">
+                            <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-zinc-200">
+                              {user.role}
                             </span>
-                          ) : null}
-                          {isProtectedAdminSelf ? (
-                            <span className="rounded-full border border-white/30 bg-white/16 px-2 py-0.5 text-white">
-                              Protected
-                            </span>
-                          ) : null}
-                          {user.department ? (
-                            <span className="rounded-full border border-white/20 bg-white/6 px-2 py-0.5 text-zinc-300">
-                              {user.department}
-                            </span>
-                          ) : null}
+                            {user.isCurrentAdmin ? (
+                              <span className="rounded-full border border-white/30 bg-white/16 px-2 py-0.5 text-white">
+                                You
+                              </span>
+                            ) : null}
+                            {isProtectedAdminSelf ? (
+                              <span className="rounded-full border border-white/30 bg-white/16 px-2 py-0.5 text-white">
+                                Protected
+                              </span>
+                            ) : null}
+                            {user.department ? (
+                              <span className="rounded-full border border-white/20 bg-white/6 px-2 py-0.5 text-zinc-300">
+                                {user.department}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={draftRole}
+                            onChange={(event) =>
+                              setRoleDrafts((current) => ({
+                                ...current,
+                                [user._id]: event.target.value as AppRole,
+                              }))
+                            }
+                            disabled={isBusy || isProtectedAdminSelf}
+                            className="h-9 cursor-pointer rounded-md border border-white/20 bg-white/10 px-2.5 text-sm text-white outline-none transition hover:bg-white/16 focus:border-white/45 focus:ring-2 focus:ring-white/20"
+                          >
+                            <option value="student">student</option>
+                            <option value="faculty">faculty</option>
+                            <option value="admin">admin</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSaveRole(user._id, user.role)}
+                            disabled={isBusy || draftRole === user.role || isProtectedAdminSelf}
+                            className="h-9 cursor-pointer rounded-md border border-white/25 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-white/12 active:bg-white/18 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isSavingRole === user._id ? "Saving..." : "Save"}
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={draftRole}
-                          onChange={(event) =>
-                            setRoleDrafts((current) => ({
-                              ...current,
-                              [user._id]: event.target.value as AppRole,
-                            }))
-                          }
-                          disabled={isBusy || isProtectedAdminSelf}
-                          className="h-9 cursor-pointer rounded-md border border-white/20 bg-white/10 px-2.5 text-sm text-white outline-none transition hover:bg-white/16 focus:border-white/45 focus:ring-2 focus:ring-white/20"
-                        >
-                          <option value="student">student</option>
-                          <option value="faculty">faculty</option>
-                          <option value="admin">admin</option>
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => handleSaveRole(user._id, user.role)}
-                          disabled={isBusy || draftRole === user.role || isProtectedAdminSelf}
-                          className="h-9 cursor-pointer rounded-md border border-white/25 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-white/12 active:bg-white/18 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isSavingRole === user._id ? "Saving..." : "Save"}
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
+                    </li>
+                  );
+                })}
               </ul>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4">
