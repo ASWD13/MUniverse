@@ -1,7 +1,6 @@
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
-  ReactNode,
 } from "react";
 
 function cx(...classes: Array<string | undefined>) {
@@ -19,7 +18,26 @@ export function PrimaryButton({
     <button
       type={type}
       className={cx(
-        "rounded-xl bg-rose-600 px-6 py-2 font-bold text-white transition-all hover:bg-rose-700 active:scale-95",
+        "inline-flex cursor-pointer items-center justify-center rounded-lg border border-white/30 bg-white/18 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/24 active:bg-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 disabled:cursor-not-allowed disabled:opacity-60",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+type SecondaryButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
+
+export function SecondaryButton({
+  className,
+  type = "button",
+  ...props
+}: SecondaryButtonProps) {
+  return (
+    <button
+      type={type}
+      className={cx(
+        "inline-flex cursor-pointer items-center justify-center rounded-lg border border-white/25 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/12 active:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 disabled:cursor-not-allowed disabled:opacity-60",
         className,
       )}
       {...props}
@@ -35,49 +53,17 @@ export function FormInput({ label, className, ...props }: FormInputProps) {
   return (
     <div className="flex w-full flex-col space-y-1">
       {label ? (
-        <label className="text-xs font-bold uppercase text-slate-500">{label}</label>
+        <label className="text-xs font-semibold uppercase tracking-[0.1em] text-zinc-400">
+          {label}
+        </label>
       ) : null}
       <input
         {...props}
         className={cx(
-          "rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition-all focus:ring-2 focus:ring-rose-500",
+          "rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-zinc-400 outline-none transition-all focus:border-white/50 focus:ring-2 focus:ring-white/20",
           className,
         )}
       />
-    </div>
-  );
-}
-
-type CardTone = "rose" | "blue" | "slate";
-
-const titleTone: Record<CardTone, string> = {
-  rose: "text-rose-600",
-  blue: "text-blue-600",
-  slate: "text-slate-800",
-};
-
-type DashboardCardProps = {
-  title: string;
-  children: ReactNode;
-  tone?: CardTone;
-};
-
-export function DashboardCard({
-  title,
-  children,
-  tone = "rose",
-}: DashboardCardProps) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-      <h3
-        className={cx(
-          "mb-4 text-sm font-bold uppercase tracking-widest",
-          titleTone[tone],
-        )}
-      >
-        {title}
-      </h3>
-      {children}
     </div>
   );
 }
