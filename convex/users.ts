@@ -206,6 +206,7 @@ export const getCurrentUser = query({
             enrollmentNumber:
                 existingUser?.enrollmentNumber ?? inferredAcademic.enrollmentNumber ?? null,
             employeeId: existingUser?.employeeId ?? null,
+            isSynced: !!existingUser,
         };
     },
 });

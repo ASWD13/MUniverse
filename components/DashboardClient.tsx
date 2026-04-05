@@ -43,7 +43,7 @@ export default function DashboardClient() {
         return <RedirectToSignIn />;
     }
 
-    if (currentUser === undefined) {
+    if (currentUser === undefined || !currentUser.isSynced) {
         return (
             <main className="flex min-h-screen items-center justify-center p-6">
                 <p className="text-sm text-zinc-300">Loading dashboard...</p>
