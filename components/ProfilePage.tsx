@@ -15,8 +15,16 @@ function formatRole(role: string | null | undefined) {
 export default function ProfilePage() {
   const user = useQuery(api.users.getCurrentUser);
 
-  const displayName = user?.fullName ?? "MUniverse User";
-  const roleLabel = formatRole(user?.role);
+  if (user === undefined || !user.isSynced) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <p className="text-sm text-zinc-300">Loading profile...</p>
+      </main>
+    );
+  }
+
+  const displayName = user.fullName ?? "MUniverse User";
+  const roleLabel = formatRole(user.role);
   const initials = displayName
     .split(" ")
     .filter(Boolean)
@@ -24,11 +32,11 @@ export default function ProfilePage() {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || "MU";
 
-  const identityText = user?.enrollmentNumber
+  const identityText = user.enrollmentNumber
     ? `Enrollment: ${user.enrollmentNumber}`
-    : user?.employeeId
+    : user.employeeId
       ? `Employee ID: ${user.employeeId}`
-      : `Clerk ID: ${user?.subject ?? "Loading..."}`;
+      : `Clerk ID: ${user.subject}`;
 
   return (
     <MainLayout roleLabel={roleLabel}>
@@ -49,7 +57,7 @@ export default function ProfilePage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <article className="rounded-lg border border-white/15 bg-white/5 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Email address</p>
-              <p className="mt-2 text-sm text-zinc-100">{user?.email ?? "Loading..."}</p>
+              <p className="mt-2 text-sm text-zinc-100">{user.email ?? "Not available"}</p>
             </article>
 
             <article className="rounded-lg border border-white/15 bg-white/5 p-4">
@@ -59,12 +67,12 @@ export default function ProfilePage() {
 
             <article className="rounded-lg border border-white/15 bg-white/5 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Department</p>
-              <p className="mt-2 text-sm text-zinc-100">{user?.department ?? "Not available"}</p>
+              <p className="mt-2 text-sm text-zinc-100">{user.department ?? "Not available"}</p>
             </article>
 
             <article className="rounded-lg border border-white/15 bg-white/5 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Account subject</p>
-              <p className="mt-2 break-all text-sm text-zinc-100">{user?.subject ?? "Loading..."}</p>
+              <p className="mt-2 break-all text-sm text-zinc-100">{user.subject}</p>
             </article>
           </div>
           <p className="mt-5 text-sm text-zinc-400">Profile details are synced from Convex user records.</p>
