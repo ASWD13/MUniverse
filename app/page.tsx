@@ -20,12 +20,6 @@ export default function HomePage() {
           >
             Open dashboard
           </Link>
-          <Link
-            href="/sign-in"
-            className="inline-flex h-11 items-center rounded-lg border border-white/25 bg-white/5 px-5 text-sm font-medium text-white transition hover:bg-white/12 active:bg-white/18"
-          >
-            Sign in
-          </Link>
         </div>
       </section>
 
