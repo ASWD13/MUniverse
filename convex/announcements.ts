@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireUser } from "./lib/auth";
 import type { AppRole } from "./lib/rbac";
 import { normalizeTargetRoles, requireRole } from "./lib/rbac";
@@ -82,23 +83,12 @@ export async function createAnnouncementHandler(
         updatedAt: Date.now(),
     });
 
-    const users = await ctx.db.query("users").collect();
-    const recipients = users.filter(
-        (candidate) =>
-            candidate._id !== user._id && targetRoles.includes(candidate.role),
-    );
-
-    await Promise.all(
-        recipients.map((recipient) =>
-            ctx.db.insert("notifications", {
-                userId: recipient._id,
-                type: "announcement",
-                content: `New announcement: ${title}`,
-                isRead: false,
-                relatedId: announcementId,
-            }),
-        ),
-    );
+    await ctx.scheduler.runAfter(0, internal.emails.sendAnnouncementNotifications, {
+        announcementId,
+        title,
+        content,
+        targetRoles,
+    });
 
     return announcementId;
 }
@@ -240,4 +230,37 @@ export const deleteAnnouncement = mutation({
         announcementId: v.id("announcements"),
     },
     handler: deleteAnnouncementHandler,
+});
+
+export const getNotifications = query({
+    args: {},
+    handler: async (ctx) => {
+        const user = await requireUser(ctx);
+
+        return await ctx.db
+            .query("notifications")
+            .withIndex("by_userId", (q) => q.eq("userId", user._id))
+            .order("desc")
+            .take(20);
+    },
+});
+
+export const markNotificationRead = mutation({
+    args: {
+        notificationId: v.id("notifications"),
+    },
+    handler: async (ctx, args) => {
+        const user = await requireUser(ctx);
+        const notification = await ctx.db.get(args.notificationId);
+
+        if (!notification || notification.userId !== user._id) {
+            throw new Error("Notification not found");
+        }
+
+        await ctx.db.patch(args.notificationId, {
+            isRead: true,
+        });
+
+        return { success: true };
+    },
 });
