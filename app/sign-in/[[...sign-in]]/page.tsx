@@ -1,24 +1,31 @@
+"use client";
+
 import { SignIn } from "@clerk/nextjs";
 
 export default function SignInPage() {
   return (
-    <main className="flex min-h-screen w-full items-center bg-black px-4 py-10 md:px-10">
-      <section className="grid w-full gap-6 md:grid-cols-2">
-        <article className="surface-card p-6 md:p-10">
-          <p className="section-kicker">MUniverse Access</p>
-          <h1 className="mt-2 font-display text-3xl font-semibold text-white md:text-5xl">
-            Sign in to your campus workspace
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-zinc-300">
-            Continue with your Mahindra University account to view announcements and role-specific
-            tools.
-          </p>
-        </article>
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-black px-6">
 
-        <article className="surface-card flex items-center justify-center p-4 md:p-8">
-          <SignIn />
-        </article>
-      </section>
+      {/* Heading */}
+      <div className="text-center mb-6 max-w-xl">
+
+        <h1 className="mt-3 text-3xl md:text-4xl font-semibold text-white">
+          MUniverse Access
+        </h1>
+
+        <p className="mt-3 text-sm text-white/50 leading-relaxed">
+          Continue with your Mahindra University email to access your dashboard.
+        </p>
+        <p className="text-sm text-red-200 leading-relaxed">
+          Non Mahindra University email addresses will not work.
+        </p>
+      </div>
+
+      {/* Clerk Card */}
+      <div className="w-full max-w-md">
+        <SignIn />
+      </div>
+
     </main>
   );
 }
