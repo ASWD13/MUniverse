@@ -115,19 +115,6 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
               );
             })}
           </nav>
-
-          <section className="surface-card-muted mt-auto p-4">
-            <p className="text-xs font-medium uppercase tracking-widest text-zinc-400">Signed in as</p>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-sm font-semibold text-white">
-                {userInitials}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{userName}</p>
-                <p className="truncate text-xs text-zinc-400">{userIdentifier}</p>
-              </div>
-            </div>
-          </section>
         </aside>
 
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-black md:pl-72">
@@ -140,8 +127,8 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
               >
                 Menu
               </button>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+              <div className="grid grid-cols-1 items-center lg:grid-cols-2">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400 mr-4">
                   Workspace
                 </p>
                 {canSwitchWorkspace ? (
