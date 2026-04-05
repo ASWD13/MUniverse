@@ -1,6 +1,7 @@
 "use client";
 
 import ClerkUserButton from "@/components/ClerkUserButton";
+import NotificationBell from "@/components/NotificationBell";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import Link from "next/link";
@@ -177,6 +178,7 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
             </div>
 
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <div className="hidden text-right md:block">
                 <p className="text-sm font-semibold text-white">{userName}</p>
                 <p className="text-xs text-zinc-400">{userIdentifier}</p>

@@ -206,6 +206,7 @@ export const getCurrentUser = query({
             enrollmentNumber:
                 existingUser?.enrollmentNumber ?? inferredAcademic.enrollmentNumber ?? null,
             employeeId: existingUser?.employeeId ?? null,
+            preferences: existingUser?.preferences ?? { emailNotifications: true },
             isSynced: !!existingUser,
         };
     },
@@ -258,6 +259,24 @@ export const setUserRole = mutation({
 
         await ctx.db.patch(args.userId, {
             role: args.role,
+            updatedAt: Date.now(),
+        });
+
+        return { success: true };
+    },
+});
+
+export const updatePreferences = mutation({
+    args: {
+        emailNotifications: v.boolean(),
+    },
+    handler: async (ctx, args) => {
+        const user = await requireUser(ctx);
+
+        await ctx.db.patch(user._id, {
+            preferences: {
+                emailNotifications: args.emailNotifications,
+            },
             updatedAt: Date.now(),
         });
 

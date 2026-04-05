@@ -20,6 +20,10 @@ export default defineSchema({
         employeeId: v.optional(v.string()),
 
         updatedAt: v.optional(v.number()),
+
+        preferences: v.optional(v.object({
+            emailNotifications: v.boolean(),
+        })),
     }).index("by_clerk_id", ["clerkId"])
         .index("by_email", ["email"])
         .index("by_department", ["department"])
