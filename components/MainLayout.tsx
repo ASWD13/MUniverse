@@ -13,9 +13,21 @@ type MainLayoutProps = {
   roleLabel?: string;
 };
 
-const navItems = [
+type NavItem = {
+  label: string;
+  href: string;
+};
+
+const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Profile", href: "/dashboard/profile" },
+];
+
+const studentNavItems: NavItem[] = [
+  { label: "Planner", href: "/dashboard/planner" },
+  { label: "Assignments", href: "/dashboard/assignments" },
+  { label: "Attendance", href: "/dashboard/attendance" },
+  { label: "Resources", href: "/dashboard/resources" },
 ];
 
 type WorkspaceRole = "student" | "faculty" | "admin";
@@ -60,10 +72,23 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
   const userIdentifier = currentUser?.email ?? currentUser?.subject ?? "Authenticated user";
   const isAdmin = currentUser?.role === "admin";
   const canSwitchWorkspace = isAdmin && pathname === "/dashboard";
+  const workspaceOverride = toWorkspaceRole(searchParams.get("workspace") ?? undefined);
   const selectedWorkspace =
     toWorkspaceRole(roleLabel?.toLowerCase()) ??
-    toWorkspaceRole(searchParams.get("workspace") ?? undefined) ??
+    workspaceOverride ??
     "admin";
+  const isStudentWorkspace = selectedWorkspace === "student";
+  const effectiveNavItems = isStudentWorkspace ? [...navItems, ...studentNavItems] : navItems;
+
+  const withWorkspaceContext = (href: string) => {
+    if (!workspaceOverride || workspaceOverride === "admin") {
+      return href;
+    }
+
+    const params = new URLSearchParams();
+    params.set("workspace", workspaceOverride);
+    return `${href}?${params.toString()}`;
+  };
 
   const handleWorkspaceChange = (nextWorkspace: WorkspaceRole) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -97,13 +122,14 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
           </header>
 
           <nav className="mt-8 space-y-1">
-            {navItems.map((item) => {
+            {effectiveNavItems.map((item) => {
               const isActive = pathname === item.href;
+              const href = withWorkspaceContext(item.href);
 
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={href}
                   onClick={() => setIsMenuOpen(false)}
                   className={`block cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isActive
                     ? "bg-white/18 text-white"
