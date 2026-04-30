@@ -10,6 +10,7 @@
 
 import type * as announcements from "../announcements.js";
 import type * as emails from "../emails.js";
+import type * as files from "../files.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_rbac from "../lib/rbac.js";
 import type * as users from "../users.js";
@@ -23,6 +24,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   announcements: typeof announcements;
   emails: typeof emails;
+  files: typeof files;
   "lib/auth": typeof lib_auth;
   "lib/rbac": typeof lib_rbac;
   users: typeof users;
