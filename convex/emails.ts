@@ -1,9 +1,9 @@
 import { Resend } from "resend";
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-export const sendAnnouncementNotifications = action({
+export const sendAnnouncementNotifications = internalAction({
   args: {
     announcementId: v.id("announcements"),
     title: v.string(),
