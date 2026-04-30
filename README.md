@@ -4,25 +4,24 @@
 
 1. Install dependencies:
 
-```bash
-pnpm install
-```
+   ```bash
+   pnpm install
+   ```
 
 2. Start Convex codegen and backend sync (keep running):
 
-```bash
-pnpm convex dev
-```
+   ```bash
+   pnpm convex dev
+   ```
 
 3. Start Next.js in another terminal:
 
-```bash
-pnpm dev
-```
+   ```bash
+   pnpm dev
+   ```
 
 4. Open:
-
-- http://localhost:3000
+   - http://localhost:3000
 
 ## Backend modules
 

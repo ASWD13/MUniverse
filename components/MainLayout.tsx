@@ -1,7 +1,7 @@
 "use client";
 
 import ClerkUserButton from "@/components/ClerkUserButton";
-import SyncUser from "@/components/SyncUser";
+import NotificationBell from "@/components/NotificationBell";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import Link from "next/link";
@@ -13,9 +13,21 @@ type MainLayoutProps = {
   roleLabel?: string;
 };
 
-const navItems = [
+type NavItem = {
+  label: string;
+  href: string;
+};
+
+const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Profile", href: "/dashboard/profile" },
+];
+
+const studentNavItems: NavItem[] = [
+  { label: "Planner", href: "/dashboard/planner" },
+  { label: "Assignments", href: "/dashboard/assignments" },
+  { label: "Attendance", href: "/dashboard/attendance" },
+  { label: "Resources", href: "/dashboard/resources" },
 ];
 
 type WorkspaceRole = "student" | "faculty" | "admin";
@@ -60,10 +72,23 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
   const userIdentifier = currentUser?.email ?? currentUser?.subject ?? "Authenticated user";
   const isAdmin = currentUser?.role === "admin";
   const canSwitchWorkspace = isAdmin && pathname === "/dashboard";
+  const workspaceOverride = toWorkspaceRole(searchParams.get("workspace") ?? undefined);
   const selectedWorkspace =
     toWorkspaceRole(roleLabel?.toLowerCase()) ??
-    toWorkspaceRole(searchParams.get("workspace") ?? undefined) ??
+    workspaceOverride ??
     "admin";
+  const isStudentWorkspace = selectedWorkspace === "student";
+  const effectiveNavItems = isStudentWorkspace ? [...navItems, ...studentNavItems] : navItems;
+
+  const withWorkspaceContext = (href: string) => {
+    if (!workspaceOverride || workspaceOverride === "admin") {
+      return href;
+    }
+
+    const params = new URLSearchParams();
+    params.set("workspace", workspaceOverride);
+    return `${href}?${params.toString()}`;
+  };
 
   const handleWorkspaceChange = (nextWorkspace: WorkspaceRole) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -80,8 +105,6 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
 
   return (
     <div className="h-dvh overflow-hidden bg-black text-zinc-100">
-      <SyncUser />
-
       <div className="flex h-full w-full">
         <aside
           className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/15 bg-black p-6 transition-transform duration-200 md:translate-x-0 ${isMenuOpen ? "translate-x-0" : "-translate-x-full"
@@ -97,13 +120,14 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
           </header>
 
           <nav className="mt-8 space-y-1">
-            {navItems.map((item) => {
+            {effectiveNavItems.map((item) => {
               const isActive = pathname === item.href;
+              const href = withWorkspaceContext(item.href);
 
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={href}
                   onClick={() => setIsMenuOpen(false)}
                   className={`block cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isActive
                     ? "bg-white/18 text-white"
@@ -154,28 +178,31 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
             </div>
 
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <div className="hidden text-right md:block">
                 <p className="text-sm font-semibold text-white">{userName}</p>
                 <p className="text-xs text-zinc-400">{userIdentifier}</p>
               </div>
               <ClerkUserButton />
-            </div>
-          </header>
+            </div >
+          </header >
 
           <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black px-4 py-6 md:px-8 md:py-8">
             {children}
           </main>
-        </div>
-      </div>
+        </div >
+      </div >
 
-      {isMenuOpen ? (
-        <button
-          type="button"
-          aria-label="Close menu overlay"
-          onClick={() => setIsMenuOpen(false)}
-          className="fixed inset-0 z-30 bg-black/70 md:hidden"
-        />
-      ) : null}
-    </div>
+      {
+        isMenuOpen ? (
+          <button
+            type="button"
+            aria-label="Close menu overlay"
+            onClick={() => setIsMenuOpen(false)
+            }
+            className="fixed inset-0 z-30 bg-black/70 md:hidden"
+          />
+        ) : null}
+    </div >
   );
 }
