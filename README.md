@@ -21,7 +21,7 @@
    ```
 
 4. Open:
-   - http://localhost:3000
+   - `http://localhost:3000`
 
 ## Backend modules
 
