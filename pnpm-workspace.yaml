@@ -6,4 +6,5 @@ onlyBuiltDependencies:
   - bufferutil
   - core-js
   - esbuild
+  - msgpackr-extract
   - utf-8-validate

@@ -283,3 +283,19 @@ export const updatePreferences = mutation({
         return { success: true };
     },
 });
+
+export const getUserByClerkId = query({
+    args: {
+        clerkId: v.string(),
+    },
+    handler: async (ctx, args) => {
+        const user = await ctx.db
+            .query("users")
+            .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+            .unique();
+
+        if (!user) return null;
+
+        return { _id: user._id, role: user.role };
+    },
+});
