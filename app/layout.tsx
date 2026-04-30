@@ -4,6 +4,10 @@ import { Archivo, Public_Sans } from "next/font/google";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import "./globals.css";
 
+import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
+import { extractRouterConfig } from "uploadthing/server";
+import { ourFileRouter } from "@/app/api/uploadthing/core";
+
 const bodyFont = Public_Sans({
   subsets: ["latin"],
   variable: "--font-body",
@@ -29,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${bodyFont.variable} ${displayFont.variable} bg-black text-zinc-100`}>
+        <NextSSRPlugin routerConfig={extractRouterConfig(ourFileRouter)} />
         <ClerkProvider
           appearance={{
             variables: {

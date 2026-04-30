@@ -71,10 +71,14 @@ export default defineSchema({
         .index("by_user_announcement", ["userId", "announcementId"]),
 
     files: defineTable({
+        fileKey: v.optional(v.string()),
         url: v.string(),
         clerkId: v.string(),
         name: v.optional(v.string()),
         size: v.optional(v.number()),
         uploadedAt: v.number(),
-    }).index("by_clerk_id", ["clerkId"]),
+    })
+        .index("by_clerk_id", ["clerkId"])
+        .index("by_url", ["url"])
+        .index("by_file_key", ["fileKey"]),
 });
