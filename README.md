@@ -8,7 +8,7 @@
 pnpm install
 ```
 
-2. Start Convex codegen and backend sync (keep running):
+2. Start Convex codegen and backend sync (keep running): 
 
 ```bash
 pnpm convex dev
