@@ -81,4 +81,63 @@ export default defineSchema({
         .index("by_clerk_id", ["clerkId"])
         .index("by_url", ["url"])
         .index("by_file_key", ["fileKey"]),
+
+    courses: defineTable({
+        courseCode: v.string(),
+        title: v.string(),
+        credits: v.number(),
+        departmentId: v.id("users"),
+        facultyId: v.id("users"),
+        semester: v.number(),
+        description: v.optional(v.string()),
+        createdAt: v.number(),
+    })
+        .index("by_facultyId", ["facultyId"])
+        .index("by_departmentId", ["departmentId"])
+        .index("by_courseCode", ["courseCode"]),
+
+    enrollments: defineTable({
+        courseId: v.id("courses"),
+        studentId: v.id("users"),
+        semester: v.number(),
+        attendancePercentage: v.optional(v.number()),
+        enrolledAt: v.number(),
+    })
+        .index("by_courseId", ["courseId"])
+        .index("by_studentId", ["studentId"])
+        .index("by_course_student", ["courseId", "studentId"]),
+
+    grades: defineTable({
+        enrollmentId: v.id("enrollments"),
+        mark: v.number(),
+        maxMark: v.number(),
+        assessmentType: v.union(
+            v.literal("assignment"),
+            v.literal("midterm"),
+            v.literal("final"),
+            v.literal("project"),
+            v.literal("quiz")
+        ),
+        feedback: v.optional(v.string()),
+        postedAt: v.number(),
+        facultyId: v.id("users"),
+    })
+        .index("by_enrollmentId", ["enrollmentId"])
+        .index("by_facultyId", ["facultyId"])
+        .index("by_courseId", ["enrollmentId"]),
+
+    assignments: defineTable({
+        courseId: v.id("courses"),
+        title: v.string(),
+        description: v.optional(v.string()),
+        dueDate: v.number(),
+        fileUrl: v.optional(v.string()),
+        fileName: v.optional(v.string()),
+        maxMarks: v.number(),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+    })
+        .index("by_courseId", ["courseId"])
+        .index("by_createdBy", ["createdBy"])
+        .index("by_dueDate", ["dueDate"]),
 });
