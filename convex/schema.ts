@@ -108,23 +108,22 @@ export default defineSchema({
         .index("by_course_student", ["courseId", "studentId"]),
 
     grades: defineTable({
-        enrollmentId: v.id("enrollments"),
-        mark: v.number(),
-        maxMark: v.number(),
-        assessmentType: v.union(
-            v.literal("assignment"),
-            v.literal("midterm"),
-            v.literal("final"),
-            v.literal("project"),
-            v.literal("quiz")
-        ),
-        feedback: v.optional(v.string()),
-        postedAt: v.number(),
-        facultyId: v.id("users"),
-    })
-        .index("by_enrollmentId", ["enrollmentId"])
-        .index("by_facultyId", ["facultyId"])
-        .index("by_courseId", ["enrollmentId"]),
+    enrollmentId: v.id("enrollments"),
+    mark: v.number(),
+    maxMark: v.number(),
+    assessmentType: v.union(
+        v.literal("assignment"),
+        v.literal("midterm"),
+        v.literal("final"),
+        v.literal("project"),
+        v.literal("quiz")
+    ),
+    feedback: v.optional(v.string()),
+    postedAt: v.number(),
+    facultyId: v.id("users"),
+})
+    .index("by_enrollmentId", ["enrollmentId"])
+    .index("by_facultyId", ["facultyId"]),
 
     assignments: defineTable({
         courseId: v.id("courses"),
