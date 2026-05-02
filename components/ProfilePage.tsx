@@ -16,7 +16,13 @@ function formatRole(role: string | null | undefined) {
 export default function ProfilePage() {
   const user = useQuery(api.users.getCurrentUser);
   const updatePreferences = useMutation(api.users.updatePreferences);
+  const updateProfile = useMutation(api.users.updateProfile);
+  
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
 
   if (user === undefined || !user.isSynced) {
     return (
@@ -52,6 +58,25 @@ export default function ProfilePage() {
     }
   };
 
+  const handleEditClick = () => {
+    setFirstName(user.firstName ?? "");
+    setLastName(user.lastName ?? "");
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setIsUpdating(true);
+    try {
+      await updateProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
+      setIsEditingProfile(false);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <MainLayout roleLabel={roleLabel}>
       <div className="w-full space-y-6">
@@ -67,28 +92,79 @@ export default function ProfilePage() {
         </header>
 
         <section className="surface-card p-6 md:p-7">
-          <h2 className="font-display text-2xl font-semibold text-white">Account details</h2>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <article className="rounded-lg border border-white/15 bg-white/5 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Email address</p>
-              <p className="mt-2 text-sm text-zinc-100">{user.email ?? "Not available"}</p>
-            </article >
+          <header className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="font-display text-2xl font-semibold text-white">Account details</h2>
+            {!isEditingProfile ? (
+              <button
+                onClick={handleEditClick}
+                className="inline-flex h-8 items-center justify-center rounded-md border border-white/20 bg-white/8 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
+              >
+                Edit Profile
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                 <button
+                  onClick={() => setIsEditingProfile(false)}
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-white/20 bg-transparent px-3 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300 transition hover:bg-white/5"
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-white/40 bg-white/20 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-white/25"
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? "Saving..." : "Save"}
+                </button>
+              </div>
+            )}
+          </header>
 
-            <article className="rounded-lg border border-white/15 bg-white/5 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Primary role</p>
-              <p className="mt-2 text-sm text-zinc-100">{roleLabel}</p>
-            </article>
-
-            <article className="rounded-lg border border-white/15 bg-white/5 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Department</p>
-              <p className="mt-2 text-sm text-zinc-100">{user.department ?? "Not available"}</p>
-            </article >
-
-            <article className="rounded-lg border border-white/15 bg-white/5 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Account subject</p>
-              <p className="mt-2 break-all text-sm text-zinc-100">{user.subject}</p>
-            </article >
-          </div >
+          {isEditingProfile ? (
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">First Name</label>
+                 <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-white/20 focus:ring-1 focus:ring-white/20 focus:outline-none transition-colors"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Last Name</label>
+                 <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-white/20 focus:ring-1 focus:ring-white/20 focus:outline-none transition-colors"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <article className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Email address</p>
+                <p className="mt-2 text-sm text-zinc-100">{user.email ?? "Not available"}</p>
+              </article >
+  
+              <article className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Primary role</p>
+                <p className="mt-2 text-sm text-zinc-100">{roleLabel}</p>
+              </article>
+  
+              <article className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Department</p>
+                <p className="mt-2 text-sm text-zinc-100">{user.department ?? "Not available"}</p>
+              </article >
+  
+              <article className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Account subject</p>
+                <p className="mt-2 break-all text-sm text-zinc-100">{user.subject}</p>
+              </article >
+            </div >
+          )}
           <p className="mt-5 text-sm text-zinc-400">Profile details are synced from Convex user records.</p>
         </section >
 
