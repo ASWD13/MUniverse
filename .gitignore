@@ -43,3 +43,6 @@ next-env.d.ts
 
 scratch/
 bun.lock
+
+# clerk configuration (can include secrets)
+/.clerk/

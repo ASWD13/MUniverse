@@ -13,8 +13,13 @@ type ConvexClientProviderProps = {
 export default function ConvexClientProvider({
   children,
 }: ConvexClientProviderProps) {
-  const convexUrl =
-    process.env.NEXT_PUBLIC_CONVEX_URL ?? "https://placeholder.convex.cloud";
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+
+  if (!convexUrl) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_CONVEX_URL. Add the Convex deployment URL to the root .env file and restart the app.",
+    );
+  }
 
   const convex = useMemo(() => new ConvexReactClient(convexUrl), [convexUrl]);
 

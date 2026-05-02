@@ -30,6 +30,13 @@ const studentNavItems: NavItem[] = [
   { label: "Resources", href: "/dashboard/resources" },
 ];
 
+const adminNavItems: NavItem[] = [
+  { label: "User Registry", href: "/dashboard/user-registry" },
+  { label: "Session Management", href: "/dashboard/session-management" },
+  { label: "Resources Management", href: "/dashboard/resources-management" },
+  { label: "Usage Reports", href: "/dashboard/usage-reports" },
+];
+
 type WorkspaceRole = "student" | "faculty" | "admin";
 
 function toWorkspaceRole(value: string | undefined): WorkspaceRole | null {
@@ -78,7 +85,12 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
     workspaceOverride ??
     "admin";
   const isStudentWorkspace = selectedWorkspace === "student";
-  const effectiveNavItems = isStudentWorkspace ? [...navItems, ...studentNavItems] : navItems;
+  const isAdminWorkspace = selectedWorkspace === "admin" && isAdmin;
+  const effectiveNavItems = isStudentWorkspace
+    ? [...navItems, ...studentNavItems]
+    : isAdminWorkspace
+    ? [...navItems, ...adminNavItems]
+    : navItems;
 
   const withWorkspaceContext = (href: string) => {
     if (!workspaceOverride || workspaceOverride === "admin") {
