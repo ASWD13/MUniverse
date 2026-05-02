@@ -173,11 +173,13 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
   const todayWindow = 24 * 60 * 60 * 1000;
   const freshCount = announcements?.filter((item) => Date.now() - item.updatedAt <= todayWindow).length ?? 0;
   const nextUnread = announcements?.find((item) => !item.isRead) ?? null;
-  const pendingAssignments = assignments.filter((item) => item.status !== "Submitted").length;
-  const averageAttendance = Math.round(
-    attendanceRecords.reduce((sum, record) => sum + (record.attended / record.total) * 100, 0) /
-    attendanceRecords.length,
-  );
+  const myAssignments = useQuery(api.assignments.getMyAssignments);
+  const myAttendance = useQuery(api.enrollments.getMyAttendance);
+
+  const pendingAssignments = myAssignments?.length ?? 0;
+  const averageAttendance = myAttendance && myAttendance.length > 0 
+    ? Math.round(myAttendance.reduce((sum, record) => sum + record.percentage, 0) / myAttendance.length)
+    : 0;
 
   const featureOptions: FeatureOption[] = [
     {
@@ -280,20 +282,25 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
           </header>
 
           <ul className="mt-5 space-y-3">
-            {assignments.map((item) => (
-              <li key={item.title} className="rounded-lg border border-white/15 bg-white/5 p-4">
+            {!myAssignments ? (
+               <p className="text-sm text-zinc-400">Loading...</p>
+            ) : myAssignments.length === 0 ? (
+               <p className="text-sm text-zinc-400">All caught up!</p>
+            ) : (
+            myAssignments.slice(0, 3).map((item) => (
+              <li key={item._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-white">{item.title}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.08em] text-zinc-400">{item.course}</p>
                   </div>
                   <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase text-zinc-200">
-                    {item.status}
+                    Pending
                   </span>
                 </div>
-                <p className="mt-3 text-sm text-zinc-300">Due: {item.due}</p>
+                <p className="mt-3 text-sm text-zinc-300">Due: {formatDate(item.dueDate)}</p>
               </li>
-            ))}
+            )))}
           </ul>
         </article>
       );
@@ -316,24 +323,29 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
           </header>
 
           <ul className="mt-5 space-y-3">
-            {attendanceRecords.map((record) => {
-              const percentage = Math.round((record.attended / record.total) * 100);
+            {!myAttendance ? (
+               <p className="text-sm text-zinc-400">Loading...</p>
+            ) : myAttendance.length === 0 ? (
+               <p className="text-sm text-zinc-400">Not enrolled in any courses</p>
+            ) : (
+            myAttendance.map((record) => {
+              const percentage = record.percentage;
 
               return (
-                <li key={record.course} className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <li key={record.courseCode} className="rounded-lg border border-white/15 bg-white/5 p-4">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-white">{record.course}</p>
                     <p className="text-sm text-zinc-200">{percentage}%</p>
                   </div>
                   <p className="mt-1 text-xs text-zinc-400">
-                    {record.attended}/{record.total} classes attended
+                    Target threshold: {record.threshold}%
                   </p>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
                     <div className="h-full rounded-full bg-white transition-all" style={{ width: `${percentage}%` }} />
                   </div>
                 </li>
               );
-            })}
+            }))}
           </ul>
         </article>
       );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import MainLayout from "./MainLayout";
 import { useState } from "react";
@@ -14,6 +15,7 @@ function formatRole(role: string | null | undefined) {
 }
 
 export default function ProfilePage() {
+  const { user: clerkUser } = useUser();
   const user = useQuery(api.users.getCurrentUser);
   const updatePreferences = useMutation(api.users.updatePreferences);
   const updateProfile = useMutation(api.users.updateProfile);
@@ -67,10 +69,20 @@ export default function ProfilePage() {
   const handleSaveProfile = async () => {
     setIsUpdating(true);
     try {
+      // 1. Update our Convex backend
       await updateProfile({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
       });
+      
+      // 2. Also update Clerk directly, so JWTs, avatars, and reload states get the new name instantly!
+      if (clerkUser) {
+        await clerkUser.update({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        });
+      }
+
       setIsEditingProfile(false);
     } finally {
       setIsUpdating(false);
