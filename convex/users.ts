@@ -153,14 +153,14 @@ export const getCurrentUser = query({
 
         const claims = identity as Record<string, unknown>;
 
-        const firstName =
+        const clerkFirstName =
             typeof claims.firstname === "string"
                 ? claims.firstname
                 : typeof claims.given_name === "string"
                     ? claims.given_name
                     : null;
 
-        const lastName =
+        const clerkLastName =
             typeof claims.lastname === "string"
                 ? claims.lastname
                 : typeof claims.family_name === "string"
@@ -189,18 +189,21 @@ export const getCurrentUser = query({
         const inferredRole = inferredType === "student" ? "student" : "faculty";
         const inferredAcademic = extractAcademicDetails(email);
 
+        const activeFirstName = existingUser?.firstName ?? clerkFirstName;
+        const activeLastName = existingUser?.lastName ?? clerkLastName;
+
         return {
             subject: identity.subject,
             audience,
             email,
-            firstname: firstName,
-            lastname: lastName,
+            firstname: activeFirstName,
+            lastname: activeLastName,
             fullName:
-                firstName && lastName
-                    ? `${firstName} ${lastName}`
-                    : firstName ?? lastName ?? identity.name ?? null,
-            firstName,
-            lastName,
+                activeFirstName && activeLastName
+                    ? `${activeFirstName} ${activeLastName}`
+                    : activeFirstName ?? activeLastName ?? identity.name ?? null,
+            firstName: activeFirstName,
+            lastName: activeLastName,
             role: existingUser?.role ?? inferredRole,
             department: existingUser?.department ?? inferredAcademic.department ?? null,
             enrollmentNumber:
@@ -297,5 +300,23 @@ export const getUserByClerkId = query({
         if (!user) return null;
 
         return { _id: user._id, role: user.role };
+    },
+});
+
+export const updateProfile = mutation({
+    args: {
+        firstName: v.string(),
+        lastName: v.string(),
+    },
+    handler: async (ctx, args) => {
+        const user = await requireUser(ctx);
+
+        await ctx.db.patch(user._id, {
+            firstName: args.firstName,
+            lastName: args.lastName,
+            updatedAt: Date.now(),
+        });
+
+        return { success: true };
     },
 });

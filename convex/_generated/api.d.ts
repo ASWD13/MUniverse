@@ -9,10 +9,15 @@
  */
 
 import type * as announcements from "../announcements.js";
+import type * as assignments from "../assignments.js";
+import type * as courses from "../courses.js";
 import type * as emails from "../emails.js";
+import type * as enrollments from "../enrollments.js";
 import type * as files from "../files.js";
+import type * as grades from "../grades.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_rbac from "../lib/rbac.js";
+import type * as reports from "../reports.js";
 import type * as users from "../users.js";
 
 import type {
@@ -23,10 +28,15 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   announcements: typeof announcements;
+  assignments: typeof assignments;
+  courses: typeof courses;
   emails: typeof emails;
+  enrollments: typeof enrollments;
   files: typeof files;
+  grades: typeof grades;
   "lib/auth": typeof lib_auth;
   "lib/rbac": typeof lib_rbac;
+  reports: typeof reports;
   users: typeof users;
 }>;
 
