@@ -37,8 +37,8 @@ export const getMyGrades = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    if (user.role !== "student") {
-      throw new Error("Only students can view their own grades this way");
+    if (user.role !== "student" && user.role !== "admin") {
+      throw new Error("Only students or admins can view their own grades this way");
     }
 
     const enrollments = await ctx.db
