@@ -48,6 +48,35 @@ export const getStudentEnrollments = query({
   },
 });
 
+export const getMyAttendance = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    if (user.role !== "student" && user.role !== "admin") {
+      throw new Error("Only students or admins can view attendance this way");
+    }
+
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_studentId", (q) => q.eq("studentId", user._id))
+      .collect();
+
+    const result = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const course = await ctx.db.get(enrollment.courseId);
+        return {
+          course: course?.title || "Unknown Course",
+          courseCode: course?.courseCode || "",
+          percentage: enrollment.attendancePercentage || 0,
+          threshold: 75,
+        };
+      })
+    );
+
+    return result;
+  },
+});
+
 export const enrollStudent = mutation({
   args: {
     courseId: v.id("courses"),

@@ -162,49 +162,79 @@ export function StudentPlannerView() {
 }
 
 export function StudentAssignmentsView() {
+  const myAssignments = useQuery(api.assignments.getMyAssignments);
+
+  function formatDateFriendly(timestamp: number) {
+    return new Date(timestamp).toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
   return (
     <StudentResourceShell
       kicker="Assignments"
       title="Assignment Center"
       description="Track every submission with due date, status, and expected weightage."
     >
+      {myAssignments === undefined ? (
+         <p className="text-sm text-zinc-400">Loading assignments...</p>
+      ) : myAssignments.length === 0 ? (
+         <p className="text-sm text-zinc-400">No active assignments found.</p>
+      ) : (
       <ul className="space-y-3">
-        {assignments.map((assignment) => (
-          <li key={assignment.title} className="rounded-lg border border-white/15 bg-white/5 p-4">
+        {myAssignments.map((assignment) => (
+          <li key={assignment._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{assignment.title}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.08em] text-zinc-400">{assignment.course}</p>
               </div>
               <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase text-zinc-200">
-                {assignment.status}
+                Pending
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-300">
-              <span>Due: {assignment.due}</span>
-              <span>Weightage: {assignment.weightage}</span>
+              <span>Due: {formatDateFriendly(assignment.dueDate)}</span>
+              <span>Weightage: {assignment.maxMarks} marks</span>
             </div>
+            {assignment.description && (
+              <p className="mt-3 text-sm text-zinc-400">{assignment.description}</p>
+            )}
+            {assignment.fileUrl && (
+               <a href={assignment.fileUrl} target="_blank" rel="noopener noreferrer" className="mt-3 text-xs text-blue-400 hover:text-blue-300 transition-colors inline-block">
+                 Download Attached File ({assignment.fileName || "Attachment"})
+               </a>
+            )}
           </li>
         ))}
       </ul>
+      )}
     </StudentResourceShell>
   );
 }
 
 export function StudentAttendanceView() {
+  const myAttendance = useQuery(api.enrollments.getMyAttendance);
+
   return (
     <StudentResourceShell
       kicker="Attendance"
       title="Attendance Monitor"
       description="Expanded attendance view with course percentage and minimum threshold checks."
     >
+      {myAttendance === undefined ? (
+        <p className="text-sm text-zinc-400">Loading attendance data...</p>
+      ) : myAttendance.length === 0 ? (
+        <p className="text-sm text-zinc-400">No courses enrolled yet.</p>
+      ) : (
       <ul className="space-y-3">
-        {attendanceRecords.map((record) => {
-          const percentage = Math.round((record.attended / record.total) * 100);
+        {myAttendance.map((record) => {
+          const percentage = record.percentage;
           const isSafe = percentage >= record.threshold;
 
           return (
-            <li key={record.course} className="rounded-lg border border-white/15 bg-white/5 p-4">
+            <li key={record.courseCode} className="rounded-lg border border-white/15 bg-white/5 p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-white">{record.course}</p>
                 <p className={`text-sm font-semibold ${isSafe ? "text-zinc-100" : "text-zinc-300"}`}>
@@ -212,7 +242,7 @@ export function StudentAttendanceView() {
                 </p>
               </div>
               <p className="mt-1 text-xs text-zinc-400">
-                {record.attended}/{record.total} classes attended • threshold {record.threshold}%
+                threshold {record.threshold}%
               </p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
                 <div className="h-full rounded-full bg-white transition-all" style={{ width: `${percentage}%` }} />
@@ -221,6 +251,7 @@ export function StudentAttendanceView() {
           );
         })}
       </ul>
+      )}
     </StudentResourceShell>
   );
 }

@@ -22,6 +22,35 @@ export const getAssignmentsByFaculty = query({
   },
 });
 
+export const getMyAssignments = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    if (user.role !== "student" && user.role !== "admin") {
+      throw new Error("Only students or admins can view assignments this way");
+    }
+
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_studentId", (q) => q.eq("studentId", user._id))
+      .collect();
+
+    const assignmentsPre = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const course = await ctx.db.get(enrollment.courseId);
+        const assigns = await ctx.db
+          .query("assignments")
+          .withIndex("by_courseId", (q) => q.eq("courseId", enrollment.courseId))
+          .collect();
+
+        return assigns.map(a => ({ ...a, course: course?.title || "Unknown", courseCode: course?.courseCode || "N/A" }));
+      })
+    );
+
+    return assignmentsPre.flat().sort((a, b) => a.dueDate - b.dueDate);
+  },
+});
+
 export const uploadAssignment = mutation({
   args: {
     courseId: v.id("courses"),

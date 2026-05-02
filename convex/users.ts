@@ -111,10 +111,8 @@ export const upsertUser = mutation({
             .unique();
 
         if (existing) {
-            // ✅ Update (DO NOT override role)
+            // ✅ Update (DO NOT override role or names under any circumstances)
             await ctx.db.patch(existing._id, {
-                firstName,
-                lastName,
                 email,
                 enrollmentNumber,
                 department,
