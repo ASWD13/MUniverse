@@ -13,7 +13,7 @@ type StudentDashboardProps = {
   viewerName?: string;
 };
 
-type StudentFeatureKey = "planner" | "assignments" | "attendance" | "resources";
+type StudentFeatureKey = "planner" | "assignments" | "attendance" | "grades" | "resources";
 
 type FeatureOption = {
   key: StudentFeatureKey;
@@ -87,6 +87,7 @@ const featureRouteByKey: Record<StudentFeatureKey, string> = {
   planner: "/dashboard/planner",
   assignments: "/dashboard/assignments",
   attendance: "/dashboard/attendance",
+  grades: "/dashboard/grades",
   resources: "/dashboard/resources",
 };
 
@@ -196,6 +197,12 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
       label: "Attendance",
       summary: `${averageAttendance}% average`,
       helper: "Monitor attendance health across core subjects.",
+    },
+    {
+      key: "grades",
+      label: "Grades",
+      summary: "Academic Performance",
+      helper: "View marks and feedback for your assessments.",
     },
     {
       key: "resources",
@@ -328,6 +335,31 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
               );
             })}
           </ul>
+        </article>
+      );
+    }
+
+    if (activeFeature === "grades") {
+      return (
+        <article className="surface-card p-5 md:p-6">
+          <header className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="section-kicker">Grades</p>
+              <h3 className="mt-1 font-display text-2xl font-semibold text-white">Performance breakdown</h3>
+            </div>
+            <ExpandRouteButton href={featureHref("grades")} label="Expand grades" />
+          </header>
+          <p className="mt-5 text-sm text-zinc-300">
+            Open the full expanded view to check breakdown.
+          </p>
+          <div className="mt-4">
+             <Link
+                href={featureHref("grades")}
+                className="inline-flex rounded-lg border border-white/20 bg-white/8 px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 hover:bg-white/14"
+              >
+                View Grades
+              </Link>
+          </div>
         </article>
       );
     }

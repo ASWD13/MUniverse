@@ -33,6 +33,33 @@ export const getGradesByStudent = query({
   },
 });
 
+export const getMyGrades = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    if (user.role !== "student") {
+      throw new Error("Only students can view their own grades this way");
+    }
+
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_studentId", (q) => q.eq("studentId", user._id))
+      .collect();
+
+    const data = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const course = await ctx.db.get(enrollment.courseId);
+        const grades = await ctx.db
+          .query("grades")
+          .withIndex("by_enrollmentId", (q) => q.eq("enrollmentId", enrollment._id))
+          .collect();
+        return { course, enrollment, grades };
+      })
+    );
+    return data;
+  },
+});
+
 export const postMark = mutation({
   args: {
     enrollmentId: v.id("enrollments"),

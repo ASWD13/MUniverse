@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import MainLayout from "./MainLayout";
+import { useState } from "react";
 
 type PlannerSlot = {
   course: string;
@@ -222,28 +225,112 @@ export function StudentAttendanceView() {
   );
 }
 
+export function StudentGradesView() {
+  const myGrades = useQuery(api.grades.getMyGrades);
+
+  return (
+    <StudentResourceShell
+      kicker="Grades"
+      title="Academic Performance"
+      description="View your grades, assessment marks, and feedback across enrolled courses."
+    >
+      {myGrades === undefined ? (
+        <p className="text-sm text-zinc-400">Loading grades...</p>
+      ) : myGrades.length === 0 ? (
+        <p className="text-sm text-zinc-400">No grades available for your enrolled courses yet.</p>
+      ) : (
+        <div className="space-y-6">
+          {myGrades.map(({ course, grades }) => {
+            const courseTitle = course?.title || "Unknown Course";
+            const courseCode = course?.courseCode || "N/A";
+            
+            return (
+              <div key={course?._id || Math.random().toString()} className="rounded-xl border border-white/15 bg-white/5 overflow-hidden">
+                <div className="bg-white/5 px-4 py-3 border-b border-white/10">
+                  <h3 className="font-semibold text-white">{courseTitle}</h3>
+                  <p className="text-xs uppercase tracking-wider text-zinc-400">{courseCode}</p>
+                </div>
+                <div className="p-4">
+                  {grades.length === 0 ? (
+                    <p className="text-sm text-zinc-400 italic">No grades posted yet.</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {grades.map((grade: any) => (
+                        <li key={grade._id} className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-white/5 p-3">
+                          <div>
+                            <p className="text-sm font-medium text-zinc-200 capitalize">{grade.assessmentType}</p>
+                            {grade.feedback && <p className="mt-1 text-xs text-zinc-400">"{grade.feedback}"</p>}
+                          </div>
+                          <div className="text-right">
+                            <p className="font-display text-lg font-semibold text-white">
+                              {grade.mark} <span className="text-sm text-zinc-400 font-normal">/ {grade.maxMark}</span>
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </StudentResourceShell>
+  );
+}
+
 export function StudentResourcesView() {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredResources = resources.filter(res => 
+    res.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    res.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    res.type.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <StudentResourceShell
       kicker="Resources"
-      title="Student Resources"
-      description="Consolidated links and support resources for academics, mentoring, and placement prep."
+      title="Course Materials & Search"
+      description="Find study materials, prep kits, and mentor hour links across your coursework."
     >
-      <div className="grid gap-3 md:grid-cols-2">
-        {resources.map((resource) => (
-          <article key={resource.title} className="rounded-lg border border-white/15 bg-white/5 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">{resource.type}</p>
-            <p className="mt-2 text-sm font-semibold text-white">{resource.title}</p>
-            <p className="mt-2 text-sm text-zinc-300">{resource.description}</p>
-            <button
-              type="button"
-              className="mt-4 inline-flex rounded-md border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
-            >
-              Open resource
-            </button>
-          </article>
-        ))}
+      <div className="mb-6 relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg className="h-5 w-5 text-zinc-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <input
+          type="search"
+          placeholder="Search materials by title, description, or type..."
+          className="w-full bg-white/5 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-white/20 focus:ring-1 focus:ring-white/20 focus:outline-none transition-colors"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
       </div>
+
+      {filteredResources.length === 0 ? (
+        <div className="py-10 text-center text-zinc-400">
+          <p>No materials found matching "{searchQuery}".</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {filteredResources.map((resource) => (
+            <article key={resource.title} className="rounded-lg border border-white/15 bg-white/5 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">{resource.type}</p>
+              <p className="mt-2 text-sm font-semibold text-white">{resource.title}</p>
+              <p className="mt-2 text-sm text-zinc-300">{resource.description}</p>
+              <button
+                type="button"
+                className="mt-4 inline-flex rounded-md border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
+              >
+                Open resource
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
     </StudentResourceShell>
   );
 }
