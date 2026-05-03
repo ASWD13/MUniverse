@@ -2,32 +2,16 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { ReactNode } from "react";
-import { useQuery } from "convex/react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import MainLayout from "./MainLayout";
-import { useState } from "react";
 
 type PlannerSlot = {
   course: string;
   slot: string;
   room: string;
   faculty: string;
-};
-
-type AssignmentItem = {
-  title: string;
-  course: string;
-  due: string;
-  status: "Pending" | "In review" | "Submitted";
-  weightage: string;
-};
-
-type AttendanceItem = {
-  course: string;
-  attended: number;
-  total: number;
-  threshold: number;
 };
 
 type ResourceItem = {
@@ -41,44 +25,6 @@ const plannerSlots: PlannerSlot[] = [
   { course: "Operating Systems", slot: "11:00 - 11:50", room: "Block A, 112", faculty: "Prof. Sharma" },
   { course: "Computer Networks", slot: "14:00 - 14:50", room: "Block B, 305", faculty: "Dr. Joseph" },
   { course: "AI Lab", slot: "16:00 - 17:30", room: "Innovation Lab", faculty: "Prof. Rao" },
-];
-
-const assignments: AssignmentItem[] = [
-  {
-    title: "Normalization worksheet",
-    course: "DBMS",
-    due: "Apr 8, 11:59 PM",
-    status: "Pending",
-    weightage: "10%",
-  },
-  {
-    title: "Packet trace analysis",
-    course: "Networks",
-    due: "Apr 9, 05:00 PM",
-    status: "In review",
-    weightage: "8%",
-  },
-  {
-    title: "Process scheduling lab",
-    course: "OS",
-    due: "Apr 11, 11:59 PM",
-    status: "Submitted",
-    weightage: "12%",
-  },
-  {
-    title: "Model evaluation note",
-    course: "AI",
-    due: "Apr 14, 09:00 PM",
-    status: "Pending",
-    weightage: "6%",
-  },
-];
-
-const attendanceRecords: AttendanceItem[] = [
-  { course: "DBMS", attended: 31, total: 36, threshold: 75 },
-  { course: "Operating Systems", attended: 28, total: 34, threshold: 75 },
-  { course: "Computer Networks", attended: 30, total: 35, threshold: 75 },
-  { course: "AI Lab", attended: 16, total: 20, threshold: 80 },
 ];
 
 const resources: ResourceItem[] = [
@@ -111,7 +57,7 @@ type StudentResourceShellProps = {
   children: ReactNode;
 };
 
-function StudentResourceShell({ kicker, title, description, children }: StudentResourceShellProps) {
+function StudentResourceShellContent({ kicker, title, description, children }: StudentResourceShellProps) {
   const searchParams = useSearchParams();
   const workspaceOverride = searchParams.get("workspace");
   const dashboardHref =
@@ -140,6 +86,14 @@ function StudentResourceShell({ kicker, title, description, children }: StudentR
   );
 }
 
+function StudentResourceShell(props: StudentResourceShellProps) {
+  return (
+    <Suspense fallback={<div className="h-dvh bg-black" />}>
+      <StudentResourceShellContent {...props} />
+    </Suspense>
+  );
+}
+
 export function StudentPlannerView() {
   return (
     <StudentResourceShell
@@ -163,6 +117,7 @@ export function StudentPlannerView() {
 
 export function StudentAssignmentsView() {
   const myAssignments = useQuery(api.assignments.getMyAssignments);
+  const logResourceAccess = useMutation(api.files.logResourceAccess);
 
   function formatDateFriendly(timestamp: number) {
     return new Date(timestamp).toLocaleString("en-IN", {
@@ -202,7 +157,19 @@ export function StudentAssignmentsView() {
               <p className="mt-3 text-sm text-zinc-400">{assignment.description}</p>
             )}
             {assignment.fileUrl && (
-               <a href={assignment.fileUrl} target="_blank" rel="noopener noreferrer" className="mt-3 text-xs text-blue-400 hover:text-blue-300 transition-colors inline-block">
+               <a
+                 href={assignment.fileUrl}
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 onClick={() => {
+                   void logResourceAccess({
+                     url: assignment.fileUrl,
+                     fileName: assignment.fileName || assignment.title,
+                     accessType: "download",
+                   });
+                 }}
+                 className="mt-3 text-xs text-blue-400 hover:text-blue-300 transition-colors inline-block"
+               >
                  Download Attached File ({assignment.fileName || "Attachment"})
                </a>
             )}
@@ -271,12 +238,12 @@ export function StudentGradesView() {
         <p className="text-sm text-zinc-400">No grades available for your enrolled courses yet.</p>
       ) : (
         <div className="space-y-6">
-          {myGrades.map(({ course, grades }) => {
+          {myGrades.map(({ course, enrollment, grades }, index) => {
             const courseTitle = course?.title || "Unknown Course";
             const courseCode = course?.courseCode || "N/A";
             
             return (
-              <div key={course?._id || Math.random().toString()} className="rounded-xl border border-white/15 bg-white/5 overflow-hidden">
+              <div key={course?._id ?? enrollment._id ?? `grades-${index}`} className="rounded-xl border border-white/15 bg-white/5 overflow-hidden">
                 <div className="bg-white/5 px-4 py-3 border-b border-white/10">
                   <h3 className="font-semibold text-white">{courseTitle}</h3>
                   <p className="text-xs uppercase tracking-wider text-zinc-400">{courseCode}</p>
@@ -286,11 +253,11 @@ export function StudentGradesView() {
                     <p className="text-sm text-zinc-400 italic">No grades posted yet.</p>
                   ) : (
                     <ul className="space-y-3">
-                      {grades.map((grade: any) => (
+                      {grades.map((grade) => (
                         <li key={grade._id} className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-white/5 p-3">
                           <div>
                             <p className="text-sm font-medium text-zinc-200 capitalize">{grade.assessmentType}</p>
-                            {grade.feedback && <p className="mt-1 text-xs text-zinc-400">"{grade.feedback}"</p>}
+                            {grade.feedback && <p className="mt-1 text-xs text-zinc-400">&quot;{grade.feedback}&quot;</p>}
                           </div>
                           <div className="text-right">
                             <p className="font-display text-lg font-semibold text-white">
@@ -313,12 +280,39 @@ export function StudentGradesView() {
 
 export function StudentResourcesView() {
   const [searchQuery, setSearchQuery] = useState("");
+  const logSearchQuery = useMutation(api.search.logSearchQuery);
+  const logResourceAccess = useMutation(api.files.logResourceAccess);
 
   const filteredResources = resources.filter(res => 
     res.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
     res.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     res.type.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) return;
+
+    const timeout = window.setTimeout(() => {
+      const startedAt = performance.now();
+      const resultCount = resources.filter((resource) =>
+        resource.title.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        resource.description.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        resource.type.toLowerCase().includes(trimmedQuery.toLowerCase()),
+      ).length;
+      const latencyMs = Math.round(performance.now() - startedAt);
+
+      void logSearchQuery({
+        query: trimmedQuery,
+        surface: "student-resources",
+        latencyMs,
+        resultCount,
+        status: "success",
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timeout);
+  }, [logSearchQuery, searchQuery]);
 
   return (
     <StudentResourceShell
@@ -343,7 +337,7 @@ export function StudentResourcesView() {
 
       {filteredResources.length === 0 ? (
         <div className="py-10 text-center text-zinc-400">
-          <p>No materials found matching "{searchQuery}".</p>
+          <p>No materials found matching &quot;{searchQuery}&quot;.</p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -354,6 +348,12 @@ export function StudentResourcesView() {
               <p className="mt-2 text-sm text-zinc-300">{resource.description}</p>
               <button
                 type="button"
+                onClick={() => {
+                  void logResourceAccess({
+                    fileName: resource.title,
+                    accessType: "view",
+                  });
+                }}
                 className="mt-4 inline-flex rounded-md border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
               >
                 Open resource

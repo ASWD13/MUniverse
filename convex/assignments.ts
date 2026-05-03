@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+import { requireRole } from "./lib/rbac";
 
 export const getAssignmentsByCourse = query({
   args: { courseId: v.id("courses") },
@@ -155,5 +156,71 @@ export const deleteAssignment = mutation({
     }
 
     await ctx.db.delete(args.assignmentId);
+  },
+});
+
+export const upsertAssignmentForAdmin = mutation({
+  args: {
+    courseId: v.id("courses"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    dueDate: v.number(),
+    fileUrl: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    maxMarks: v.number(),
+    createdBy: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    requireRole(user, ["admin"]);
+
+    const course = await ctx.db.get(args.courseId);
+    if (!course) {
+      throw new Error("Course not found");
+    }
+
+    const createdBy = args.createdBy ?? course.facultyId;
+    const faculty = await ctx.db.get(createdBy);
+    if (!faculty || faculty.role !== "faculty") {
+      throw new Error("createdBy must point to a faculty user");
+    }
+
+    if (!args.title.trim()) {
+      throw new Error("Assignment title is required");
+    }
+
+    if (args.maxMarks <= 0) {
+      throw new Error("Max marks must be greater than 0");
+    }
+
+    const existing = (
+      await ctx.db
+        .query("assignments")
+        .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))
+        .collect()
+    ).find((assignment) => assignment.title.toLowerCase() === args.title.trim().toLowerCase());
+
+    const assignmentData = {
+      courseId: args.courseId,
+      title: args.title.trim(),
+      description: args.description,
+      dueDate: args.dueDate,
+      fileUrl: args.fileUrl,
+      fileName: args.fileName,
+      maxMarks: args.maxMarks,
+      createdBy,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, assignmentData);
+      return { id: existing._id, created: false };
+    }
+
+    const id = await ctx.db.insert("assignments", {
+      ...assignmentData,
+      createdAt: Date.now(),
+    });
+
+    return { id, created: true };
   },
 });

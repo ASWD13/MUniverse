@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 
 type MainLayoutProps = {
   children: ReactNode;
@@ -55,18 +55,7 @@ function formatRole(role: string | null | undefined) {
   return `${role[0]?.toUpperCase() ?? ""}${role.slice(1)}`;
 }
 
-function initialsFromName(name: string) {
-  const initials = name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((segment) => segment[0]?.toUpperCase() ?? "")
-    .join("");
-
-  return initials || "MU";
-}
-
-export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
+function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -75,7 +64,6 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
 
   const resolvedRoleLabel = roleLabel ?? formatRole(currentUser?.role);
   const userName = currentUser?.fullName ?? "MUniverse User";
-  const userInitials = initialsFromName(userName);
   const userIdentifier = currentUser?.email ?? currentUser?.subject ?? "Authenticated user";
   const isAdmin = currentUser?.role === "admin";
   const canSwitchWorkspace = isAdmin && pathname === "/dashboard";
@@ -216,5 +204,13 @@ export default function MainLayout({ children, roleLabel }: MainLayoutProps) {
           />
         ) : null}
     </div >
+  );
+}
+
+export default function MainLayout(props: MainLayoutProps) {
+  return (
+    <Suspense fallback={<div className="h-dvh bg-black" />}>
+      <MainLayoutContent {...props} />
+    </Suspense>
   );
 }

@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import AdminDashboard from "./AdminDashboard";
 import FacultyDashboard from "./FacultyDashboard";
 import StudentDashboard from "./StudentDashboard";
+import { Suspense } from "react";
 
 type RoleView = "student" | "faculty" | "admin";
 
@@ -26,7 +27,7 @@ function getWorkspaceOverride(value: string | null): RoleView | null {
     return null;
 }
 
-export default function DashboardClient() {
+function DashboardClientContent() {
     const { isLoaded, isSignedIn } = useAuth();
     const searchParams = useSearchParams();
     const currentUser = useQuery(api.users.getCurrentUser, isLoaded && isSignedIn ? {} : "skip");
@@ -62,5 +63,13 @@ export default function DashboardClient() {
         <FacultyDashboard viewerName={viewerName} />
     ) : (
         <AdminDashboard viewerName={viewerName} />
+    );
+}
+
+export default function DashboardClient() {
+    return (
+        <Suspense fallback={<main className="min-h-screen bg-black" />}>
+            <DashboardClientContent />
+        </Suspense>
     );
 }

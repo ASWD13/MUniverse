@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+import { requireRole } from "./lib/rbac";
 
 export const getEnrollmentsByCourse = query({
   args: { courseId: v.id("courses") },
@@ -131,5 +132,53 @@ export const updateAttendance = mutation({
     });
 
     return await ctx.db.get(args.enrollmentId);
+  },
+});
+
+export const upsertEnrollmentForAdmin = mutation({
+  args: {
+    courseId: v.id("courses"),
+    studentId: v.id("users"),
+    semester: v.number(),
+    attendancePercentage: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    requireRole(user, ["admin"]);
+
+    const course = await ctx.db.get(args.courseId);
+    if (!course) {
+      throw new Error("Course not found");
+    }
+
+    const student = await ctx.db.get(args.studentId);
+    if (!student || student.role !== "student") {
+      throw new Error("studentId must point to a student user");
+    }
+
+    const existing = await ctx.db
+      .query("enrollments")
+      .withIndex("by_course_student", (q) =>
+        q.eq("courseId", args.courseId).eq("studentId", args.studentId)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        semester: args.semester,
+        attendancePercentage: args.attendancePercentage,
+      });
+      return { id: existing._id, created: false };
+    }
+
+    const id = await ctx.db.insert("enrollments", {
+      courseId: args.courseId,
+      studentId: args.studentId,
+      semester: args.semester,
+      attendancePercentage: args.attendancePercentage,
+      enrolledAt: Date.now(),
+    });
+
+    return { id, created: true };
   },
 });

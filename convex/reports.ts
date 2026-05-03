@@ -109,6 +109,7 @@ export const getUsageReport = query({
             announcements: {
                 total: totalAnnouncements,
                 totalReads,
+                totalUnread,
                 roleTargetBreakdown: roleTargetMap,
                 perAnnouncement: announcementStats,
             },

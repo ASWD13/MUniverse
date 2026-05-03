@@ -82,6 +82,37 @@ export default defineSchema({
         .index("by_url", ["url"])
         .index("by_file_key", ["fileKey"]),
 
+    resourceAccessLogs: defineTable({
+        fileId: v.optional(v.id("files")),
+        url: v.optional(v.string()),
+        fileName: v.optional(v.string()),
+        userId: v.optional(v.id("users")),
+        clerkId: v.optional(v.string()),
+        accessType: v.union(v.literal("view"), v.literal("download")),
+        accessedAt: v.number(),
+        userAgent: v.optional(v.string()),
+        referrer: v.optional(v.string()),
+    })
+        .index("by_fileId", ["fileId"])
+        .index("by_userId", ["userId"])
+        .index("by_accessedAt", ["accessedAt"])
+        .index("by_file_accessedAt", ["fileId", "accessedAt"]),
+
+    searchQueryLogs: defineTable({
+        query: v.string(),
+        normalizedQuery: v.string(),
+        surface: v.string(),
+        latencyMs: v.number(),
+        resultCount: v.optional(v.number()),
+        status: v.union(v.literal("success"), v.literal("error")),
+        userId: v.optional(v.id("users")),
+        clerkId: v.optional(v.string()),
+        searchedAt: v.number(),
+    })
+        .index("by_searchedAt", ["searchedAt"])
+        .index("by_surface", ["surface"])
+        .index("by_userId", ["userId"]),
+
     courses: defineTable({
         courseCode: v.string(),
         title: v.string(),
