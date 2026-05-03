@@ -1,12 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
 import MainLayout from "./MainLayout";
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -22,8 +18,6 @@ function formatDate(timestamp: number): string {
   });
 }
 
-// ── sub-components ────────────────────────────────────────────────────────────
-
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <article className="surface-card p-4 md:p-5">
@@ -33,125 +27,34 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function ComingSoonCard({ label, description }: { label: string; description: string }) {
+function MetricTile({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="flex flex-col justify-between rounded-lg border border-dashed border-white/15 bg-white/3 p-4">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">{label}</p>
-        <p className="mt-2 font-display text-3xl font-semibold text-zinc-600">—</p>
-      </div>
-      <p className="mt-3 text-xs text-zinc-500">{description}</p>
+    <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+      <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">{label}</p>
+      <p className="mt-2 font-display text-2xl font-semibold text-white">{value}</p>
     </div>
   );
 }
 
-function SectionPlaceholder({ title, description }: { title: string; description: string }) {
+function EmptyState({ title }: { title: string }) {
   return (
     <div className="rounded-lg border border-dashed border-white/15 bg-white/3 p-6 text-center">
       <p className="text-sm font-semibold text-zinc-500">{title}</p>
-      <p className="mt-1 text-xs text-zinc-600">{description}</p>
     </div>
   );
 }
 
-// ── local types (mirrors what Convex returns) ─────────────────────────────────
-
-type AppRole = "student" | "faculty" | "admin";
-
-type AnnouncementItem = {
-  _id: Id<"announcements">;
-  title: string;
-  targetRoles: AppRole[];
-  updatedAt: number;
-  isRead: boolean;
-  readAt: number | null;
-};
-
-type AdminUserItem = {
-  _id: Id<"users">;
-  role: AppRole;
-  fullName: string;
-  email: string | null;
-  department: string | null;
-  enrollmentNumber: string | null;
-  employeeId: string | null;
-  isCurrentAdmin: boolean;
-};
-
-type FileItem = {
-  _id: Id<"files">;
-  url: string;
-  clerkId: string;
-  name?: string;
-  size?: number;
-  uploadedAt?: number;
-};
-
-// ── component ─────────────────────────────────────────────────────────────────
-
 export default function UsageReports() {
-  // Only using already-generated api entries — no npx convex dev needed
-  const rawAnnouncements = useQuery(api.announcements.getAnnouncements);
-  const rawUsers        = useQuery(api.users.listUsersForAdmin);
-  const rawFiles        = useQuery(api.files.getCurrentUserFiles);
+  const report = useQuery(api.reports.getUsageReport);
+  const resourceAccessStats = useQuery(api.files.getResourceAccessStats);
+  const searchStats = useQuery(api.search.getSearchPerformanceStats);
 
-  const announcements = rawAnnouncements as AnnouncementItem[] | undefined;
-  const users         = rawUsers        as AdminUserItem[]     | undefined;
-  const files         = rawFiles        as FileItem[]          | undefined;
-
-  const isLoading = announcements === undefined || users === undefined || files === undefined;
-
-  // ── derived stats ──────────────────────────────────────────────────────────
-
-  const userStats = useMemo(() => {
-    if (!users) return null;
-    const deptMap: Record<string, number> = {};
-    for (const u of users) {
-      if (u.department) deptMap[u.department] = (deptMap[u.department] ?? 0) + 1;
-    }
-    return {
-      total:    users.length,
-      students: users.filter((u) => u.role === "student").length,
-      faculty:  users.filter((u) => u.role === "faculty").length,
-      admins:   users.filter((u) => u.role === "admin").length,
-      departmentBreakdown: Object.entries(deptMap)
-        .map(([dept, count]) => ({ dept, count }))
-        .sort((a, b) => b.count - a.count),
-    };
-  }, [users]);
-
-  const announcementStats = useMemo(() => {
-    if (!announcements) return null;
-    const roleMap: Record<string, number> = { student: 0, faculty: 0, admin: 0 };
-    for (const a of announcements) {
-      for (const role of a.targetRoles) roleMap[role] = (roleMap[role] ?? 0) + 1;
-    }
-    return {
-      total:      announcements.length,
-      totalRead:  announcements.filter((a) => a.isRead).length,
-      totalUnread: announcements.filter((a) => !a.isRead).length,
-      roleTargetBreakdown: roleMap,
-      perAnnouncement: [...announcements].sort((a, b) => b.updatedAt - a.updatedAt),
-    };
-  }, [announcements]);
-
-  const fileStats = useMemo(() => {
-    if (!files) return null;
-    return {
-      total:             files.length,
-      totalStorageBytes: files.reduce((sum, f) => sum + (f.size ?? 0), 0),
-    };
-  }, [files]);
-
-  const generatedAt = useMemo(() => Date.now(), []);
-
-  // ── render ─────────────────────────────────────────────────────────────────
+  const isLoading =
+    report === undefined || resourceAccessStats === undefined || searchStats === undefined;
 
   return (
     <MainLayout roleLabel="Admin">
       <div className="w-full space-y-6">
-
-        {/* Header */}
         <header className="surface-card motion-enter p-6 md:p-7">
           <p className="section-kicker">Usage Reports</p>
           <h1 className="mt-2 font-display text-3xl font-semibold text-white md:text-4xl">
@@ -159,31 +62,29 @@ export default function UsageReports() {
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-300">
             Live snapshot of portal activity across users, announcements, resources, and academic
-            data. Sections marked as coming soon will auto-populate once the relevant backend APIs
-            are deployed.
+            data.
           </p>
-          {!isLoading && (
+          {report ? (
             <p className="mt-3 text-xs text-zinc-500">
-              Generated at {formatDate(generatedAt)}
+              Generated at {formatDate(report.generatedAt)}
             </p>
-          )}
+          ) : null}
         </header>
 
-        {/* Top-level stat cards */}
         <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-          <StatCard label="Total Users"    value={isLoading ? "..." : (userStats?.total ?? 0)} />
-          <StatCard label="Announcements"  value={isLoading ? "..." : (announcementStats?.total ?? 0)} />
-          <StatCard label="Files Uploaded" value={isLoading ? "..." : (fileStats?.total ?? 0)} />
+          <StatCard label="Total Users" value={isLoading ? "..." : (report?.users.total ?? 0)} />
+          <StatCard
+            label="Announcements"
+            value={isLoading ? "..." : (report?.announcements.total ?? 0)}
+          />
+          <StatCard label="Files Uploaded" value={isLoading ? "..." : (report?.files.total ?? 0)} />
           <StatCard
             label="Storage Used"
-            value={isLoading ? "..." : formatBytes(fileStats?.totalStorageBytes ?? 0)}
+            value={isLoading ? "..." : formatBytes(report?.files.totalStorageBytes ?? 0)}
           />
         </section>
 
-        {/* Users & Announcements */}
         <section className="grid gap-6 lg:grid-cols-2">
-
-          {/* User breakdown */}
           <article className="surface-card p-5 md:p-6">
             <header>
               <p className="section-kicker">User Analytics</p>
@@ -195,15 +96,15 @@ export default function UsageReports() {
               </p>
             </header>
 
-            {isLoading || !userStats ? (
+            {!report ? (
               <p className="mt-5 text-sm text-zinc-400">Loading...</p>
             ) : (
               <>
                 <div className="mt-5 grid grid-cols-3 gap-3">
                   {[
-                    { label: "Students", value: userStats.students },
-                    { label: "Faculty",  value: userStats.faculty  },
-                    { label: "Admins",   value: userStats.admins   },
+                    { label: "Students", value: report.users.students },
+                    { label: "Faculty", value: report.users.faculty },
+                    { label: "Admins", value: report.users.admins },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -219,16 +120,18 @@ export default function UsageReports() {
                   ))}
                 </div>
 
-                {userStats.departmentBreakdown.length > 0 ? (
+                {report.users.departmentBreakdown.length > 0 ? (
                   <div className="mt-4 border-t border-white/10 pt-4">
                     <p className="section-kicker mb-3">By Department</p>
                     <ul className="space-y-2">
-                      {userStats.departmentBreakdown.map(({ dept, count }) => (
+                      {report.users.departmentBreakdown.map(({ dept, count }) => (
                         <li
                           key={dept}
                           className="flex items-center justify-between rounded-lg border border-white/15 bg-white/5 px-4 py-2.5"
                         >
-                          <p className="text-sm uppercase tracking-[0.06em] text-zinc-300">{dept}</p>
+                          <p className="text-sm uppercase tracking-[0.06em] text-zinc-300">
+                            {dept}
+                          </p>
                           <p className="text-sm font-semibold text-white">{count}</p>
                         </li>
                       ))}
@@ -241,7 +144,6 @@ export default function UsageReports() {
             )}
           </article>
 
-          {/* Announcement stats */}
           <article className="surface-card p-5 md:p-6">
             <header>
               <p className="section-kicker">Communication Analytics</p>
@@ -249,19 +151,19 @@ export default function UsageReports() {
                 Announcement Reads
               </h2>
               <p className="mt-2 text-sm text-zinc-300">
-                Read/unread breakdown, role targeting, and per-announcement status.
+                Read/unread breakdown, role targeting, and per-announcement counts.
               </p>
             </header>
 
-            {isLoading || !announcementStats ? (
+            {!report ? (
               <p className="mt-5 text-sm text-zinc-400">Loading...</p>
             ) : (
               <>
                 <div className="mt-5 grid grid-cols-3 gap-3">
                   {[
-                    { label: "Total",   value: announcementStats.total       },
-                    { label: "Read",    value: announcementStats.totalRead   },
-                    { label: "Unread",  value: announcementStats.totalUnread },
+                    { label: "Total", value: report.announcements.total },
+                    { label: "Reads", value: report.announcements.totalReads },
+                    { label: "Unread", value: report.announcements.totalUnread },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -277,11 +179,10 @@ export default function UsageReports() {
                   ))}
                 </div>
 
-                {/* Role targeting */}
                 <div className="mt-4 border-t border-white/10 pt-4">
                   <p className="section-kicker mb-3">Announcements Targeting Each Role</p>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(announcementStats.roleTargetBreakdown).map(([role, count]) => (
+                    {Object.entries(report.announcements.roleTargetBreakdown).map(([role, count]) => (
                       <span
                         key={role}
                         className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.08em] text-zinc-200"
@@ -292,69 +193,129 @@ export default function UsageReports() {
                   </div>
                 </div>
 
-                {/* Per-announcement list */}
-                {announcementStats.perAnnouncement.length > 0 && (
+                {report.announcements.perAnnouncement.length > 0 ? (
                   <div className="mt-4 border-t border-white/10 pt-4">
-                    <p className="section-kicker mb-3">Per-Announcement Status</p>
+                    <p className="section-kicker mb-3">Per-Announcement Reads</p>
                     <ul className="space-y-2">
-                      {announcementStats.perAnnouncement.map((a) => (
+                      {report.announcements.perAnnouncement.map((announcement) => (
                         <li
-                          key={a._id}
+                          key={announcement._id}
                           className="flex items-center justify-between rounded-lg border border-white/15 bg-white/5 px-4 py-2.5"
                         >
                           <div className="min-w-0">
-                            <p className="truncate text-sm text-zinc-200">{a.title}</p>
-                            <p className="text-xs text-zinc-500">{formatDate(a.updatedAt)}</p>
+                            <p className="truncate text-sm text-zinc-200">{announcement.title}</p>
+                            <p className="text-xs text-zinc-500">
+                              {formatDate(announcement.updatedAt)}
+                            </p>
                           </div>
                           <span className="ml-3 flex-shrink-0 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
-                            {a.isRead ? "Read" : "Unread"}
+                            {announcement.readCount} reads
                           </span>
                         </li>
                       ))}
                     </ul>
                   </div>
-                )}
+                ) : null}
               </>
             )}
           </article>
         </section>
 
-        {/* Academic section — auto-populates once Anshika's APIs ship */}
         <section className="surface-card p-5 md:p-6">
           <header>
             <p className="section-kicker">Academic Analytics</p>
             <h2 className="mt-1 font-display text-2xl font-semibold text-white">
               Courses, Enrollments &amp; Grades
             </h2>
-            
           </header>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <ComingSoonCard label="Courses"      description="Awaiting course data from backend" />
-            <ComingSoonCard label="Enrollments"  description="Awaiting enrollment data"          />
-            <ComingSoonCard label="Assignments"  description="Awaiting assignment data"          />
-            <ComingSoonCard label="Grades Posted" description="Awaiting grades from faculty"     />
+            <MetricTile
+              label="Courses"
+              value={isLoading ? "..." : (report?.academic.totalCourses ?? 0)}
+            />
+            <MetricTile
+              label="Enrollments"
+              value={isLoading ? "..." : (report?.academic.totalEnrollments ?? 0)}
+            />
+            <MetricTile
+              label="Assignments"
+              value={isLoading ? "..." : (report?.academic.totalAssignments ?? 0)}
+            />
+            <MetricTile
+              label="Grades Posted"
+              value={isLoading ? "..." : (report?.academic.totalGrades ?? 0)}
+            />
           </div>
 
-          {/* Resource access — placeholder until Anshika adds access logging */}
           <div className="mt-6 border-t border-white/10 pt-5">
             <p className="section-kicker mb-3">Resource Access Stats</p>
-            <SectionPlaceholder
-              title="Per-resource download & view counts"
-              description="Will auto-populate resource access-logging API is deployed. No changes needed here."
-            />
+            {!resourceAccessStats ? (
+              <p className="text-sm text-zinc-400">Loading resource access stats...</p>
+            ) : resourceAccessStats.totalAccesses === 0 ? (
+              <EmptyState title="No resource views or downloads logged yet." />
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <MetricTile label="Total Accesses" value={resourceAccessStats.totalAccesses} />
+                  <MetricTile label="Views" value={resourceAccessStats.totalViews} />
+                  <MetricTile label="Downloads" value={resourceAccessStats.totalDownloads} />
+                  <MetricTile label="Resources" value={resourceAccessStats.uniqueResourcesAccessed} />
+                </div>
+                <ul className="mt-4 space-y-2">
+                  {resourceAccessStats.perResource.slice(0, 8).map((resource) => (
+                    <li
+                      key={resource.fileId ?? resource.url ?? resource.fileName}
+                      className="rounded-lg border border-white/15 bg-white/5 px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm font-medium text-zinc-200">
+                          {resource.fileName}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          {resource.views} views / {resource.downloads} downloads
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
 
-          {/* Search performance — placeholder until Rishi's perf hooks are live */}
-          <div className="mt-4">
+          <div className="mt-6 border-t border-white/10 pt-5">
             <p className="section-kicker mb-3">Search Query Performance</p>
-            <SectionPlaceholder
-              title="Search latency & query counts"
-              description="Will auto-populate  performance monitoring hooks are connected to the backend. No changes needed here."
-            />
+            {!searchStats ? (
+              <p className="text-sm text-zinc-400">Loading search stats...</p>
+            ) : searchStats.totalQueries === 0 ? (
+              <EmptyState title="No search queries logged yet." />
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <MetricTile label="Queries" value={searchStats.totalQueries} />
+                  <MetricTile label="Avg Latency" value={`${searchStats.averageLatencyMs} ms`} />
+                  <MetricTile label="Slowest" value={`${searchStats.slowestLatencyMs} ms`} />
+                  <MetricTile label="Failed" value={searchStats.failedQueries} />
+                </div>
+                <ul className="mt-4 space-y-2">
+                  {searchStats.topQueries.map((query) => (
+                    <li
+                      key={query.query}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/15 bg-white/5 px-4 py-3"
+                    >
+                      <p className="min-w-0 truncate text-sm font-medium text-zinc-200">
+                        {query.query}
+                      </p>
+                      <p className="text-xs text-zinc-400">
+                        {query.count} searches / {query.averageLatencyMs} ms avg
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
         </section>
-
       </div>
     </MainLayout>
   );

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:academic": "node scripts/seed-academic-data.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.8",
@@ -27,7 +28,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "5.8.3",
     "vitest": "^4.1.2"
   }
 }

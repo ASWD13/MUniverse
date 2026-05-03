@@ -18,6 +18,8 @@ import type * as grades from "../grades.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_rbac from "../lib/rbac.js";
 import type * as reports from "../reports.js";
+import type * as search from "../search.js";
+import type * as seedAcademic from "../seedAcademic.js";
 import type * as users from "../users.js";
 
 import type {
@@ -37,6 +39,8 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/rbac": typeof lib_rbac;
   reports: typeof reports;
+  search: typeof search;
+  seedAcademic: typeof seedAcademic;
   users: typeof users;
 }>;
 

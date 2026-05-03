@@ -1,6 +1,15 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
+import { requireRole } from "./lib/rbac";
+
+const assessmentTypeValidator = v.union(
+  v.literal("assignment"),
+  v.literal("midterm"),
+  v.literal("final"),
+  v.literal("project"),
+  v.literal("quiz")
+);
 
 export const getGradesByEnrollment = query({
   args: { enrollmentId: v.id("enrollments") },
@@ -65,13 +74,7 @@ export const postMark = mutation({
     enrollmentId: v.id("enrollments"),
     mark: v.number(),
     maxMark: v.number(),
-    assessmentType: v.union(
-      v.literal("assignment"),
-      v.literal("midterm"),
-      v.literal("final"),
-      v.literal("project"),
-      v.literal("quiz")
-    ),
+    assessmentType: assessmentTypeValidator,
     feedback: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -163,5 +166,71 @@ export const getClassGrades = query({
     );
 
     return gradesData;
+  },
+});
+
+export const upsertGradeForAdmin = mutation({
+  args: {
+    enrollmentId: v.id("enrollments"),
+    mark: v.number(),
+    maxMark: v.number(),
+    assessmentType: assessmentTypeValidator,
+    feedback: v.optional(v.string()),
+    facultyId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    requireRole(user, ["admin"]);
+
+    const enrollment = await ctx.db.get(args.enrollmentId);
+    if (!enrollment) {
+      throw new Error("Enrollment not found");
+    }
+
+    const course = await ctx.db.get(enrollment.courseId);
+    if (!course) {
+      throw new Error("Course not found");
+    }
+
+    const facultyId = args.facultyId ?? course.facultyId;
+    const faculty = await ctx.db.get(facultyId);
+    if (!faculty || faculty.role !== "faculty") {
+      throw new Error("facultyId must point to a faculty user");
+    }
+
+    if (args.mark > args.maxMark) {
+      throw new Error("Mark cannot be greater than max mark");
+    }
+
+    const existing = (
+      await ctx.db
+        .query("grades")
+        .withIndex("by_enrollmentId", (q) => q.eq("enrollmentId", args.enrollmentId))
+        .collect()
+    ).find((grade) => grade.assessmentType === args.assessmentType);
+
+    const gradeData = {
+      enrollmentId: args.enrollmentId,
+      mark: args.mark,
+      maxMark: args.maxMark,
+      assessmentType: args.assessmentType,
+      feedback: args.feedback,
+      facultyId,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        ...gradeData,
+        postedAt: Date.now(),
+      });
+      return { id: existing._id, created: false };
+    }
+
+    const id = await ctx.db.insert("grades", {
+      ...gradeData,
+      postedAt: Date.now(),
+    });
+
+    return { id, created: true };
   },
 });
