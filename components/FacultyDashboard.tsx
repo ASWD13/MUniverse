@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import MainLayout from "./MainLayout";
@@ -43,7 +44,8 @@ function StatCard({ label, value }: StatCardProps) {
 }
 
 export default function FacultyDashboard({ viewerName, userId }: FacultyDashboardProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("announcements");
+  const searchParams = useSearchParams();
+  const activeTab = (searchParams.get("tab") as DashboardTab) || "announcements";
 
   // Announcements state and mutations
   const announcements = useQuery(api.announcements.getAnnouncements);
@@ -218,50 +220,6 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
             Manage announcements, grades, assignments, and student enrollments in one unified platform.
           </p>
         </header>
-
-        {/* Tab Navigation */}
-        <div className="surface-card flex overflow-x-auto gap-2 p-3">
-          <button
-            onClick={() => setActiveTab("announcements")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeTab === "announcements"
-                ? "bg-white text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            Announcements
-          </button>
-          <button
-            onClick={() => setActiveTab("grades")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeTab === "grades"
-                ? "bg-white text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            Grades & Marks
-          </button>
-          <button
-            onClick={() => setActiveTab("assignments")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeTab === "assignments"
-                ? "bg-white text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            Assignments
-          </button>
-          <button
-            onClick={() => setActiveTab("enrollments")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeTab === "enrollments"
-                ? "bg-white text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            Student Enrollment
-          </button>
-        </div>
 
         {/* Announcements Tab */}
         {activeTab === "announcements" && (

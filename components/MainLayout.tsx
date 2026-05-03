@@ -30,11 +30,17 @@ const studentNavItems: NavItem[] = [
   { label: "Resources", href: "/dashboard/resources" },
 ];
 
+const facultyNavItems: NavItem[] = [
+  { label: "Grades & Marks", href: "/dashboard?tab=grades" },
+  { label: "Assignments", href: "/dashboard?tab=assignments" },
+  { label: "Student Enrollment", href: "/dashboard?tab=enrollments" },
+];
+
 const adminNavItems: NavItem[] = [
   { label: "User Registry", href: "/dashboard/user-registry" },
-  { label: "Session Management", href: "/dashboard/session-management" },
-  { label: "Resources Management", href: "/dashboard/resources-management" },
   { label: "Usage Reports", href: "/dashboard/usage-reports" },
+  { label: "Session Management", href: "/dashboard/session-management" },
+  { label: "Resource Management", href: "/dashboard/resources-management" },
 ];
 
 type WorkspaceRole = "student" | "faculty" | "admin";
@@ -73,21 +79,27 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
     workspaceOverride ??
     "admin";
   const isStudentWorkspace = selectedWorkspace === "student";
-  const isAdminWorkspace = selectedWorkspace === "admin" && isAdmin;
-  const effectiveNavItems = isStudentWorkspace
-    ? [...navItems, ...studentNavItems]
-    : isAdminWorkspace
-    ? [...navItems, ...adminNavItems]
-    : navItems;
+  const isFacultyWorkspace = selectedWorkspace === "faculty";
+  const isAdminWorkspace = selectedWorkspace === "admin";
+  
+  const effectiveNavItems = [
+    { label: "Dashboard", href: "/dashboard" },
+    ...(isStudentWorkspace ? studentNavItems : []),
+    ...(isFacultyWorkspace ? facultyNavItems : []),
+    ...(isAdminWorkspace ? adminNavItems : []),
+    { label: "Profile", href: "/dashboard/profile" },
+  ];
 
   const withWorkspaceContext = (href: string) => {
     if (!workspaceOverride || workspaceOverride === "admin") {
       return href;
     }
 
-    const params = new URLSearchParams();
+    const [basePath, search] = href.split("?");
+    const params = new URLSearchParams(search || "");
     params.set("workspace", workspaceOverride);
-    return `${href}?${params.toString()}`;
+    
+    return `${basePath}?${params.toString()}`;
   };
 
   const handleWorkspaceChange = (nextWorkspace: WorkspaceRole) => {
@@ -121,7 +133,14 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
 
           <nav className="mt-8 space-y-1">
             {effectiveNavItems.map((item) => {
-              const isActive = pathname === item.href;
+              const url = new URL(item.href, "http://localhost");
+              const itemTab = url.searchParams.get("tab");
+               
+              const isActive = pathname === url.pathname && 
+                (url.pathname === "/dashboard" && item.label !== "Profile"
+                  ? (itemTab ? searchParams.get("tab") === itemTab : (!searchParams.has("tab") || searchParams.get("tab") === "announcements"))
+                  : true);
+                  
               const href = withWorkspaceContext(item.href);
 
               return (
@@ -206,6 +225,7 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
     </div >
   );
 }
+<<<<<<< HEAD
 
 export default function MainLayout(props: MainLayoutProps) {
   return (
@@ -214,3 +234,5 @@ export default function MainLayout(props: MainLayoutProps) {
     </Suspense>
   );
 }
+=======
+>>>>>>> d4eaed3 (moved faculty dashboard tabs to sidebar)
