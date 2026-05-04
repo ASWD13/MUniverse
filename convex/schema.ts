@@ -74,11 +74,18 @@ export default defineSchema({
         fileKey: v.optional(v.string()),
         url: v.string(),
         clerkId: v.string(),
+        uploadedByUserId: v.optional(v.id("users")),
+        courseId: v.optional(v.id("courses")),
+        resourceGroupId: v.optional(v.string()),
+        title: v.optional(v.string()),
+        description: v.optional(v.string()),
         name: v.optional(v.string()),
         size: v.optional(v.number()),
         uploadedAt: v.number(),
     })
         .index("by_clerk_id", ["clerkId"])
+        .index("by_courseId", ["courseId"])
+        .index("by_uploadedByUserId", ["uploadedByUserId"])
         .index("by_url", ["url"])
         .index("by_file_key", ["fileKey"]),
 
@@ -121,7 +128,23 @@ export default defineSchema({
         facultyId: v.id("users"),
         semester: v.number(),
         description: v.optional(v.string()),
+        timetable: v.optional(v.array(v.object({
+            day: v.union(
+                v.literal("Monday"),
+                v.literal("Tuesday"),
+                v.literal("Wednesday"),
+                v.literal("Thursday"),
+                v.literal("Friday"),
+                v.literal("Saturday"),
+                v.literal("Sunday"),
+            ),
+            startTime: v.string(),
+            endTime: v.string(),
+            room: v.optional(v.string()),
+            label: v.optional(v.string()),
+        }))),
         createdAt: v.number(),
+        updatedAt: v.optional(v.number()),
     })
         .index("by_facultyId", ["facultyId"])
         .index("by_departmentId", ["departmentId"])

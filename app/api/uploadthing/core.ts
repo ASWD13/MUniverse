@@ -9,6 +9,58 @@ import { api } from "@/convex/_generated/api";
 const f = createUploadthing();
 
 export const ourFileRouter = {
+  courseResourceUploader: f(
+    {
+      blob: {
+        maxFileSize: "64MB",
+        maxFileCount: 100,
+      },
+      pdf: {
+        maxFileSize: "64MB",
+        maxFileCount: 100,
+      },
+      image: {
+        maxFileSize: "16MB",
+        maxFileCount: 100,
+      },
+      video: {
+        maxFileSize: "128MB",
+        maxFileCount: 100,
+      },
+      text: {
+        maxFileSize: "16MB",
+        maxFileCount: 100,
+      },
+    },
+    {
+      awaitServerData: false,
+    },
+  )
+    .middleware(async () => {
+      const { userId } = await auth();
+
+      if (!userId) {
+        throw new UploadThingError("Unauthorized");
+      }
+
+      const user = await fetchQuery(api.users.getUserByClerkId, {
+        clerkId: userId,
+      });
+
+      if (!user || (user.role !== "admin" && user.role !== "faculty")) {
+        throw new UploadThingError("Forbidden");
+      }
+
+      return { userId };
+    })
+    .onUploadComplete(async ({ metadata, file }) => ({
+      uploadedBy: metadata.userId,
+      fileKey: file.key,
+      url: file.ufsUrl,
+      name: file.name,
+      size: file.size,
+    })),
+
   imageUploader: f(
     {
       image: {

@@ -264,3 +264,21 @@ export const markNotificationRead = mutation({
         return { success: true };
     },
 });
+
+export const clearAllNotifications = mutation({
+    args: {},
+    handler: async (ctx) => {
+        const user = await requireUser(ctx);
+
+        const notifications = await ctx.db
+            .query("notifications")
+            .withIndex("by_userId", (q) => q.eq("userId", user._id))
+            .collect();
+
+        for (const notification of notifications) {
+            await ctx.db.delete(notification._id);
+        }
+
+        return { success: true, cleared: notifications.length };
+    },
+});

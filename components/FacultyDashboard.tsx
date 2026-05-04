@@ -10,7 +10,6 @@ import { FormInput, PrimaryButton, SecondaryButton } from "./UIElements";
 
 type FacultyDashboardProps = {
   viewerName?: string;
-  userId?: Id<"users">;
 };
 
 type Audience = "students" | "studentsAndFaculty" | "all";
@@ -43,7 +42,7 @@ function StatCard({ label, value }: StatCardProps) {
   );
 }
 
-export default function FacultyDashboard({ viewerName, userId }: FacultyDashboardProps) {
+export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) {
   const searchParams = useSearchParams();
   const activeTab = (searchParams.get("tab") as DashboardTab) || "announcements";
 
@@ -51,6 +50,8 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
   const announcements = useQuery(api.announcements.getAnnouncements);
   const createAnnouncement = useMutation(api.announcements.createAnnouncement);
   const markAnnouncementRead = useMutation(api.announcements.markAnnouncementRead);
+  const managedCourses = useQuery(api.courses.getMyManagedCourses);
+  const uploadAssignment = useMutation(api.assignments.uploadAssignment);
 
   // Form states
   const [noticeTitle, setNoticeTitle] = useState("");
@@ -73,6 +74,7 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
 
   // Assignment form states
   const [assignmentTitle, setAssignmentTitle] = useState("");
+  const [assignmentCourseId, setAssignmentCourseId] = useState<Id<"courses"> | "">("");
   const [assignmentDescription, setAssignmentDescription] = useState("");
   const [assignmentDueDate, setAssignmentDueDate] = useState("");
   const [assignmentMaxMarks, setAssignmentMaxMarks] = useState("100");
@@ -175,8 +177,8 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
   const handleUploadAssignment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!assignmentTitle.trim()) {
-      setAssignmentError("Assignment title is required.");
+    if (!assignmentTitle.trim() || !assignmentCourseId) {
+      setAssignmentError("Assignment title and course are required.");
       return;
     }
 
@@ -195,12 +197,20 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
     setIsSubmittingAssignment(true);
 
     try {
-      // Clear form and show success message
+      await uploadAssignment({
+        courseId: assignmentCourseId,
+        title: assignmentTitle,
+        description: assignmentDescription.trim() || undefined,
+        dueDate: new Date(assignmentDueDate).getTime(),
+        maxMarks,
+      });
+
       setAssignmentTitle("");
+      setAssignmentCourseId("");
       setAssignmentDescription("");
       setAssignmentDueDate("");
       setAssignmentMaxMarks("100");
-      alert("Assignment uploaded successfully");
+      setAssignmentError("Assignment created.");
     } catch (error) {
       setAssignmentError(error instanceof Error ? error.message : "Unable to upload assignment.");
     } finally {
@@ -494,8 +504,8 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
               </header>
 
               <form onSubmit={handleUploadAssignment} className="mt-5 space-y-4">
-                <FormInput
-                  label="Assignment Title"
+                  <FormInput
+                    label="Assignment Title"
                   type="text"
                   placeholder="e.g., Database Design Project"
                   value={assignmentTitle}
@@ -512,6 +522,23 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
                     placeholder="Describe the assignment requirements"
                     className="w-full resize-none rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20"
                   />
+
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Course</span>
+                    <select
+                      value={assignmentCourseId}
+                      onChange={(event) => setAssignmentCourseId(event.target.value as Id<"courses"> | "")}
+                      className="h-11 w-full cursor-pointer rounded-lg border border-white/20 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20"
+                      required
+                    >
+                      <option value="">Choose course</option>
+                      {(managedCourses ?? []).map((course) => (
+                        <option key={course._id} value={course._id}>
+                          {course.courseCode} · {course.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </label>
 
                 <FormInput
@@ -532,13 +559,9 @@ export default function FacultyDashboard({ viewerName, userId }: FacultyDashboar
                   required
                 />
 
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Attach File (Optional)</span>
-                  <input
-                    type="file"
-                    className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-white/20"
-                  />
-                </label>
+                <p className="rounded-lg border border-white/15 bg-white/5 p-3 text-xs text-zinc-400">
+                  Course files are uploaded from Course Resources and are automatically visible to enrolled students.
+                </p>
 
                 {assignmentError ? <p className="text-sm font-medium text-red-400">{assignmentError}</p> : null}
 

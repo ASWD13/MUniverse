@@ -9,6 +9,7 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const notifications = useQuery(api.announcements.getNotifications);
   const markRead = useMutation(api.announcements.markNotificationRead);
+  const clearAll = useMutation(api.announcements.clearAllNotifications);
 
   const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
 
@@ -56,11 +57,22 @@ export default function NotificationBell() {
               <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
                 Notifications
               </p>
-              {unreadCount > 0 && (
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {unreadCount} New
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white">
+                    {unreadCount} New
+                  </span>
+                )}
+                {notifications && notifications.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void clearAll()}
+                    className="rounded-md border border-white/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Clear all
+                  </button>
+                ) : null}
+              </div>
             </header>
             <div className="max-h-96 overflow-y-auto">
               {notifications === undefined ? (

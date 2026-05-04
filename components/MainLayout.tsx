@@ -18,11 +18,6 @@ type NavItem = {
   href: string;
 };
 
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Profile", href: "/dashboard/profile" },
-];
-
 const studentNavItems: NavItem[] = [
   { label: "Planner", href: "/dashboard/planner" },
   { label: "Assignments", href: "/dashboard/assignments" },
@@ -34,6 +29,7 @@ const facultyNavItems: NavItem[] = [
   { label: "Grades & Marks", href: "/dashboard?tab=grades" },
   { label: "Assignments", href: "/dashboard?tab=assignments" },
   { label: "Student Enrollment", href: "/dashboard?tab=enrollments" },
+  { label: "Course Resources", href: "/dashboard/resources-management" },
 ];
 
 const adminNavItems: NavItem[] = [

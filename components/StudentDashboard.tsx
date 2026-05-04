@@ -26,61 +26,14 @@ type PlannerSlot = {
   course: string;
   slot: string;
   room: string;
-};
-
-type AssignmentItem = {
-  title: string;
-  course: string;
-  due: string;
-  status: "Pending" | "In review" | "Submitted";
-};
-
-type AttendanceItem = {
-  course: string;
-  attended: number;
-  total: number;
-};
-
-type ResourceItem = {
-  title: string;
-  description: string;
-  href: string;
+  day?: string;
+  faculty?: string;
 };
 
 const plannerSlots: PlannerSlot[] = [
   { course: "DBMS", slot: "09:00 - 09:50", room: "Block C, 204" },
   { course: "Operating Systems", slot: "11:00 - 11:50", room: "Block A, 112" },
   { course: "Computer Networks", slot: "14:00 - 14:50", room: "Block B, 305" },
-];
-
-const assignments: AssignmentItem[] = [
-  { title: "Normalization worksheet", course: "DBMS", due: "Apr 8", status: "Pending" },
-  { title: "Packet trace analysis", course: "Networks", due: "Apr 9", status: "In review" },
-  { title: "Process scheduling lab", course: "OS", due: "Apr 11", status: "Submitted" },
-];
-
-const attendanceRecords: AttendanceItem[] = [
-  { course: "DBMS", attended: 31, total: 36 },
-  { course: "Operating Systems", attended: 28, total: 34 },
-  { course: "Computer Networks", attended: 30, total: 35 },
-];
-
-const resourceLinks: ResourceItem[] = [
-  {
-    title: "Course repository",
-    description: "Slides, reference notes, and handouts from your registered courses.",
-    href: "#",
-  },
-  {
-    title: "Exam prep kit",
-    description: "Past papers and unit-wise revision checklists for the current semester.",
-    href: "#",
-  },
-  {
-    title: "Mentor office hours",
-    description: "Book a support slot with your assigned faculty mentor.",
-    href: "#",
-  },
 ];
 
 const featureRouteByKey: Record<StudentFeatureKey, string> = {
@@ -175,18 +128,36 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
   const nextUnread = announcements?.find((item) => !item.isRead) ?? null;
   const myAssignments = useQuery(api.assignments.getMyAssignments);
   const myAttendance = useQuery(api.enrollments.getMyAttendance);
+  const myEnrollments = useQuery(api.enrollments.getMyEnrollments, {});
+  const myCourseFiles = useQuery(api.files.getMyCourseFiles, {});
 
   const pendingAssignments = myAssignments?.length ?? 0;
   const averageAttendance = myAttendance && myAttendance.length > 0 
     ? Math.round(myAttendance.reduce((sum, record) => sum + record.percentage, 0) / myAttendance.length)
     : 0;
+  const timetableSlots: PlannerSlot[] = (myEnrollments ?? []).flatMap((enrollment) => {
+    const course = enrollment.course;
+    if (!course) {
+      return [];
+    }
+
+    return (course.timetable ?? []).map((slot) => ({
+      course: `${course.courseCode} · ${course.title}`,
+      day: slot.day,
+      slot: `${slot.startTime} - ${slot.endTime}`,
+      room: slot.room ?? "Room TBA",
+      faculty: slot.label,
+    }));
+  });
+  const visiblePlannerSlots = timetableSlots.length > 0 ? timetableSlots : plannerSlots;
+  const resourceCount = myCourseFiles?.length ?? 0;
 
   const featureOptions: FeatureOption[] = [
     {
       key: "planner",
       label: "Class planner",
-      summary: `${plannerSlots.length} classes today`,
-      helper: "Keep your day schedule and immediate notice context aligned.",
+      summary: `${visiblePlannerSlots.length} weekly slots`,
+      helper: "Review your enrolled course timetable.",
     },
     {
       key: "assignments",
@@ -209,8 +180,8 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
     {
       key: "resources",
       label: "Academic resources",
-      summary: `${resourceLinks.length} quick links`,
-      helper: "Open frequently used academic references in one place.",
+      summary: `${resourceCount} course files`,
+      helper: "Open uploaded materials from your enrolled courses.",
     },
   ];
 
@@ -253,9 +224,10 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
           </header>
 
           <ul className="mt-5 grid gap-3 md:grid-cols-3">
-            {plannerSlots.map((slot) => (
-              <li key={slot.course} className="rounded-lg border border-white/15 bg-white/5 p-4">
+            {visiblePlannerSlots.map((slot, index) => (
+              <li key={`${slot.course}-${slot.slot}-${index}`} className="rounded-lg border border-white/15 bg-white/5 p-4">
                 <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">{slot.course}</p>
+                {slot.day ? <p className="mt-2 text-sm font-semibold text-white">{slot.day}</p> : null}
                 <p className="mt-2 text-sm font-semibold text-zinc-100">{slot.slot}</p>
                 <p className="mt-1 text-sm text-zinc-300">{slot.room}</p>
               </li>
@@ -387,20 +359,31 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
           <ExpandRouteButton href={featureHref("resources")} label="Expand resources" />
         </header>
 
-        <ul className="mt-5 grid gap-3 md:grid-cols-3">
-          {resourceLinks.map((resource) => (
-            <li key={resource.title} className="rounded-lg border border-white/15 bg-white/5 p-4">
-              <p className="text-sm font-semibold text-white">{resource.title}</p>
-              <p className="mt-2 text-sm text-zinc-300">{resource.description}</p>
-              <a
-                href={resource.href}
-                className="mt-4 inline-flex text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 hover:text-white"
-              >
-                Open
-              </a>
-            </li>
-          ))}
-        </ul>
+        {myCourseFiles === undefined ? (
+          <p className="mt-5 text-sm text-zinc-400">Loading course files...</p>
+        ) : myCourseFiles.length === 0 ? (
+          <p className="mt-5 text-sm text-zinc-400">No course files have been uploaded for your enrolled courses yet.</p>
+        ) : (
+          <ul className="mt-5 grid gap-3 md:grid-cols-3">
+            {myCourseFiles.slice(0, 6).map((resource) => (
+              <li key={resource._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                  {resource.course?.courseCode ?? "Course"}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white">{resource.title ?? resource.name ?? "Course resource"}</p>
+                {resource.description ? <p className="mt-2 text-sm text-zinc-300">{resource.description}</p> : null}
+                <a
+                  href={resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 hover:text-white"
+                >
+                  Open
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
       </article>
     );
   };
