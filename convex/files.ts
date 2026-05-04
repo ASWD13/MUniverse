@@ -6,6 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/auth";
 import { requireRole } from "./lib/rbac";
 import { UTApi } from "uploadthing/server";
+import { refreshSessionInternal } from "./sessions";
 
 async function requireCourseFileManager(ctx: QueryCtx | MutationCtx, courseId: Id<"courses">) {
     const user = await requireUser(ctx);
@@ -329,6 +330,7 @@ export const logResourceAccess = mutation({
         url: v.optional(v.string()),
         fileName: v.optional(v.string()),
         accessType: v.union(v.literal("view"), v.literal("download")),
+        latencyMs: v.optional(v.number()),
         userAgent: v.optional(v.string()),
         referrer: v.optional(v.string()),
     },
@@ -354,10 +356,13 @@ export const logResourceAccess = mutation({
             userId: user._id,
             clerkId: user.clerkId,
             accessType: args.accessType,
+            latencyMs: args.latencyMs,
             accessedAt: Date.now(),
             userAgent: args.userAgent,
             referrer: args.referrer,
         });
+
+        await refreshSessionInternal(ctx, user._id, user.clerkId, args.userAgent);
 
         return { success: true, id };
     },

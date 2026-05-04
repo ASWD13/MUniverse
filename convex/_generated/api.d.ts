@@ -15,11 +15,14 @@ import type * as emails from "../emails.js";
 import type * as enrollments from "../enrollments.js";
 import type * as files from "../files.js";
 import type * as grades from "../grades.js";
+import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_rbac from "../lib/rbac.js";
+import type * as metrics from "../metrics.js";
 import type * as reports from "../reports.js";
 import type * as search from "../search.js";
 import type * as seedAcademic from "../seedAcademic.js";
+import type * as sessions from "../sessions.js";
 import type * as users from "../users.js";
 
 import type {
@@ -36,11 +39,14 @@ declare const fullApi: ApiFromModules<{
   enrollments: typeof enrollments;
   files: typeof files;
   grades: typeof grades;
+  http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/rbac": typeof lib_rbac;
+  metrics: typeof metrics;
   reports: typeof reports;
   search: typeof search;
   seedAcademic: typeof seedAcademic;
+  sessions: typeof sessions;
   users: typeof users;
 }>;
 
