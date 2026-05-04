@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
@@ -16,6 +16,15 @@ type Audience = "students" | "studentsAndFaculty" | "all";
 type DashboardTab = "announcements" | "grades" | "assignments" | "enrollments";
 type AssessmentType = "assignment" | "midterm" | "final" | "project" | "quiz";
 type AttendanceStatus = "present" | "absent" | "late" | "excused";
+type DayName = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+
+type TimetableSlot = {
+  day: DayName;
+  startTime: string;
+  endTime: string;
+  room?: string;
+  label?: string;
+};
 
 const targetRolesByAudience = {
   students: ["student"],
@@ -23,11 +32,33 @@ const targetRolesByAudience = {
   all: ["student", "faculty", "admin"],
 } as const;
 
+const dayNames: DayName[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 function formatDate(timestamp: number) {
   return new Date(timestamp).toLocaleString("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function getDateDayName(dateValue: string) {
+  if (!dateValue) return null;
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return dayNames[date.getDay()];
+}
+
+function combineDateAndTime(dateValue: string, timeValue: string) {
+  return new Date(`${dateValue}T${timeValue}`).getTime();
+}
+
+function getDurationMinutes(slot: TimetableSlot) {
+  const start = combineDateAndTime("2000-01-01", slot.startTime);
+  const end = combineDateAndTime("2000-01-01", slot.endTime);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return undefined;
+  }
+  return Math.round((end - start) / 60000);
 }
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
@@ -148,9 +179,11 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
   const [isSubmittingAssignment, setIsSubmittingAssignment] = useState(false);
 
   const [enrollmentCourseId, setEnrollmentCourseId] = useState<Id<"courses"> | "">("");
-  const [attendanceTitle, setAttendanceTitle] = useState("");
-  const [attendanceStart, setAttendanceStart] = useState("");
+  const [attendanceDate, setAttendanceDate] = useState("");
+  const [attendanceSlotIndex, setAttendanceSlotIndex] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<Id<"attendanceSessions"> | "">("");
+  const [isCreatingAttendanceSession, setIsCreatingAttendanceSession] = useState(false);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [attendanceMessage, setAttendanceMessage] = useState<string | null>(null);
   const [markingAttendanceKey, setMarkingAttendanceKey] = useState<string | null>(null);
 
@@ -183,6 +216,71 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
   const readCount = announcements?.filter((item) => item.isRead).length ?? 0;
   const unreadCount = totalCount ? totalCount - readCount : 0;
   const completion = totalCount ? Math.round((readCount / totalCount) * 100) : 0;
+  const firstManagedCourseId = managedCourses?.[0]?._id ?? "";
+  const selectedAttendanceCourse = managedCourses?.find((course) => course._id === enrollmentCourseId) ?? null;
+  const selectedAttendanceTimetable = (selectedAttendanceCourse?.timetable ?? []) as TimetableSlot[];
+  const allowedAttendanceDays = useMemo(
+    () => Array.from(new Set(selectedAttendanceTimetable.map((slot) => slot.day))),
+    [selectedAttendanceTimetable],
+  );
+  const attendanceDayName = getDateDayName(attendanceDate);
+  const availableSlotsForDate = useMemo(
+    () =>
+      attendanceDayName
+        ? selectedAttendanceTimetable.filter((slot) => slot.day === attendanceDayName)
+        : [],
+    [attendanceDayName, selectedAttendanceTimetable],
+  );
+  const selectedAttendanceSlot =
+    attendanceSlotIndex !== "" ? availableSlotsForDate[Number(attendanceSlotIndex)] : undefined;
+  const canCreateAttendanceSession =
+    Boolean(enrollmentCourseId && attendanceDate && selectedAttendanceSlot && allowedAttendanceDays.length > 0);
+
+  useEffect(() => {
+    if (!managedCourses || managedCourses.length === 0) {
+      return;
+    }
+
+    const courseIds = new Set(managedCourses.map((course) => course._id));
+
+    if (!gradeCourseId || !courseIds.has(gradeCourseId)) {
+      setGradeCourseId(firstManagedCourseId);
+      setGradeEnrollmentId("");
+    }
+
+    if (!assignmentCourseId || !courseIds.has(assignmentCourseId)) {
+      setAssignmentCourseId(firstManagedCourseId);
+    }
+
+    if (!enrollmentCourseId || !courseIds.has(enrollmentCourseId)) {
+      setEnrollmentCourseId(firstManagedCourseId);
+      setSelectedSessionId("");
+      setAttendanceDate("");
+      setAttendanceSlotIndex("");
+      setIsAttendanceModalOpen(false);
+    }
+  }, [assignmentCourseId, enrollmentCourseId, firstManagedCourseId, gradeCourseId, managedCourses]);
+
+  useEffect(() => {
+    if (!attendanceDate) {
+      setAttendanceSlotIndex("");
+      return;
+    }
+
+    if (availableSlotsForDate.length === 0) {
+      setAttendanceSlotIndex("");
+      return;
+    }
+
+    if (availableSlotsForDate.length === 1) {
+      setAttendanceSlotIndex("0");
+      return;
+    }
+
+    if (!availableSlotsForDate[Number(attendanceSlotIndex)]) {
+      setAttendanceSlotIndex("");
+    }
+  }, [attendanceDate, attendanceSlotIndex, availableSlotsForDate]);
 
   const sortedSessions = useMemo(
     () => [...(attendanceSessions ?? [])].sort((left, right) => right.startsAt - left.startsAt),
@@ -328,24 +426,50 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
   const handleCreateAttendanceSession = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!enrollmentCourseId || !attendanceTitle.trim() || !attendanceStart) {
-      setAttendanceMessage("Course, session title, and date are required.");
+    if (!enrollmentCourseId || !selectedAttendanceCourse) {
+      setAttendanceMessage("Choose a course before creating attendance.");
       return;
     }
+
+    if (selectedAttendanceTimetable.length === 0) {
+      setAttendanceMessage("This course has no timetable slots. Add timetable slots from Course Management first.");
+      return;
+    }
+
+    if (!attendanceDate) {
+      setAttendanceMessage("Choose a class date.");
+      return;
+    }
+
+    if (!attendanceDayName || !allowedAttendanceDays.includes(attendanceDayName)) {
+      setAttendanceMessage(
+        `Choose a ${allowedAttendanceDays.join(" or ")} date for this course.`,
+      );
+      return;
+    }
+
+    if (!selectedAttendanceSlot) {
+      setAttendanceMessage("Choose the class slot for this date.");
+      return;
+    }
+
+    setIsCreatingAttendanceSession(true);
+    setAttendanceMessage(null);
 
     try {
       const result = await createAttendanceSession({
         courseId: enrollmentCourseId,
-        title: attendanceTitle,
-        startsAt: new Date(attendanceStart).getTime(),
-        durationMinutes: 50,
+        title: `${selectedAttendanceCourse.courseCode} attendance · ${attendanceDayName} ${selectedAttendanceSlot.startTime}`,
+        startsAt: combineDateAndTime(attendanceDate, selectedAttendanceSlot.startTime),
+        durationMinutes: getDurationMinutes(selectedAttendanceSlot),
       });
       setSelectedSessionId(result.id);
-      setAttendanceTitle("");
-      setAttendanceStart("");
+      setIsAttendanceModalOpen(true);
       setAttendanceMessage("Attendance session created.");
     } catch (error) {
       setAttendanceMessage(error instanceof Error ? error.message : "Unable to create attendance session.");
+    } finally {
+      setIsCreatingAttendanceSession(false);
     }
   };
 
@@ -603,6 +727,8 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                 <p className="mt-5 text-sm text-zinc-400">Choose a course to view posted grades.</p>
               ) : classGrades === undefined ? (
                 <p className="mt-5 text-sm text-zinc-400">Loading grades...</p>
+              ) : classGrades.length === 0 ? (
+                <p className="mt-5 text-sm text-zinc-400">No enrolled users found for this course.</p>
               ) : (
                 <ul className="mt-5 space-y-3">
                   {classGrades.map((row) => (
@@ -619,7 +745,7 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                       </div>
                       {row.grades.length ? (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {row.grades.map((grade) => (
+                          {[...row.grades].sort((left, right) => right.postedAt - left.postedAt).map((grade) => (
                             <span key={grade._id} className="rounded-full border border-white/15 bg-white/8 px-2.5 py-1 text-xs text-zinc-200">
                               {grade.assessmentType}: {grade.mark}/{grade.maxMark}
                             </span>
@@ -687,10 +813,15 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
               <header>
                 <p className="section-kicker">Submissions</p>
                 <h2 className="mt-1 font-display text-2xl font-semibold text-white">Assignment list</h2>
+                {assignmentCourseId && assignments ? (
+                  <p className="mt-2 text-sm text-zinc-400">
+                    Showing {assignments.length} assignment{assignments.length === 1 ? "" : "s"} for the selected course.
+                  </p>
+                ) : null}
               </header>
 
               {!assignmentCourseId ? (
-                <p className="mt-5 text-sm text-zinc-400">Choose a course in the form to view assignments and submissions.</p>
+                <p className="mt-5 text-sm text-zinc-400">Choose a course to view assignments and submissions.</p>
               ) : assignments === undefined ? (
                 <p className="mt-5 text-sm text-zinc-400">Loading assignments...</p>
               ) : assignments.length === 0 ? (
@@ -751,19 +882,33 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
               ) : courseRoster?.students.length === 0 ? (
                 <p className="mt-5 text-sm text-zinc-400">No users enrolled in this course.</p>
               ) : (
-                <ul className="mt-5 space-y-3">
-                  {(courseRoster?.students ?? []).map((row) => (
-                    <li key={row.enrollment._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
-                      <p className="text-sm font-semibold text-white">{row.student?.fullName ?? "Unknown user"}</p>
-                      <p className="mt-1 text-xs text-zinc-400">
-                        {row.student?.email ?? "No email"} · {row.student?.role ?? "user"}
-                      </p>
-                      <p className="mt-2 text-xs text-zinc-400">
-                        Legacy attendance: {row.enrollment.attendancePercentage ?? 0}%
-                      </p>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-5 overflow-x-auto rounded-lg border border-white/15">
+                  <table className="w-full min-w-[34rem] text-left text-sm">
+                    <thead className="bg-white/5 text-xs uppercase tracking-[0.08em] text-zinc-400">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Name</th>
+                        <th className="px-4 py-3 font-semibold">Identifier</th>
+                        <th className="px-4 py-3 font-semibold">Role</th>
+                        <th className="px-4 py-3 font-semibold">Attendance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {(courseRoster?.students ?? []).map((row) => (
+                        <tr key={row.enrollment._id} className="bg-white/[0.02]">
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-white">{row.student?.fullName ?? "Unknown user"}</p>
+                            <p className="mt-1 text-xs text-zinc-400">{row.student?.email ?? "No email"}</p>
+                          </td>
+                          <td className="px-4 py-3 text-zinc-300">
+                            {row.student?.enrollmentNumber ?? row.student?.employeeId ?? "No ID"}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-300">{row.student?.role ?? "user"}</td>
+                          <td className="px-4 py-3 text-zinc-300">{row.enrollment.attendancePercentage ?? 0}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </article>
 
@@ -771,77 +916,199 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
               <header>
                 <p className="section-kicker">Attendance</p>
                 <h2 className="mt-1 font-display text-2xl font-semibold text-white">Date-wise marking</h2>
+                <p className="mt-2 text-sm text-zinc-300">
+                  Attendance dates are restricted to the selected course timetable days.
+                </p>
               </header>
 
-              <form onSubmit={handleCreateAttendanceSession} className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_13rem_auto]">
-                <FormInput label="Session title" type="text" value={attendanceTitle} onChange={(event) => setAttendanceTitle(event.target.value)} />
-                <FormInput label="Starts at" type="datetime-local" value={attendanceStart} onChange={(event) => setAttendanceStart(event.target.value)} />
-                <div className="flex items-end">
-                  <PrimaryButton type="submit" disabled={!enrollmentCourseId}>
-                    Create
-                  </PrimaryButton>
+              <form onSubmit={handleCreateAttendanceSession} className="mt-5 space-y-4">
+                <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Allowed class days</p>
+                  <p className="mt-2 text-sm text-zinc-200">
+                    {allowedAttendanceDays.length > 0
+                      ? allowedAttendanceDays.join(", ")
+                      : "No timetable slots configured for this course."}
+                  </p>
                 </div>
-              </form>
 
-              {sortedSessions.length > 0 ? (
-                <label className="mt-4 block space-y-1">
-                  <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Attendance session</span>
-                  <select
-                    value={selectedSessionId}
-                    onChange={(event) => setSelectedSessionId(event.target.value as Id<"attendanceSessions"> | "")}
-                    className="h-11 w-full cursor-pointer rounded-lg border border-white/20 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20"
-                  >
-                    <option value="">Choose session</option>
-                    {sortedSessions.map((session) => (
-                      <option key={session._id} value={session._id}>
-                        {session.title} · {formatDate(session.startsAt)}
-                      </option>
-                    ))}
-                  </select>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Class date</span>
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(event) => {
+                      const nextDate = event.target.value;
+                      const nextDay = getDateDayName(nextDate);
+                      setAttendanceDate(nextDate);
+                      setSelectedSessionId("");
+                      setIsAttendanceModalOpen(false);
+
+                      if (nextDate && nextDay && !allowedAttendanceDays.includes(nextDay)) {
+                        setAttendanceMessage(`This course does not meet on ${nextDay}. Choose ${allowedAttendanceDays.join(" or ")}.`);
+                      } else {
+                        setAttendanceMessage(null);
+                      }
+                    }}
+                    disabled={!enrollmentCourseId || allowedAttendanceDays.length === 0}
+                    className="h-11 w-full rounded-lg border border-white/20 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
                 </label>
-              ) : null}
+
+                {availableSlotsForDate.length > 1 ? (
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Class slot</span>
+                    <select
+                      value={attendanceSlotIndex}
+                      onChange={(event) => setAttendanceSlotIndex(event.target.value)}
+                      className="h-11 w-full cursor-pointer rounded-lg border border-white/20 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20"
+                    >
+                      <option value="">Choose slot</option>
+                      {availableSlotsForDate.map((slot, index) => (
+                        <option key={`${slot.day}-${slot.startTime}-${slot.endTime}-${index}`} value={String(index)}>
+                          {slot.startTime} - {slot.endTime}
+                          {slot.room ? ` · ${slot.room}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Auto-filled time</span>
+                    <input
+                      value={selectedAttendanceSlot ? `${selectedAttendanceSlot.startTime} - ${selectedAttendanceSlot.endTime}` : "Select a valid class date"}
+                      readOnly
+                      className="h-11 w-full rounded-lg border border-white/20 bg-white/5 px-3 text-sm text-zinc-300 outline-none"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Room</span>
+                    <input
+                      value={selectedAttendanceSlot?.room ?? "Room TBA"}
+                      readOnly
+                      className="h-11 w-full rounded-lg border border-white/20 bg-white/5 px-3 text-sm text-zinc-300 outline-none"
+                    />
+                  </label>
+                </div>
+
+                <PrimaryButton type="submit" disabled={!canCreateAttendanceSession || isCreatingAttendanceSession}>
+                  {isCreatingAttendanceSession ? "Opening roster..." : "Open attendance roster"}
+                </PrimaryButton>
+              </form>
 
               {attendanceMessage ? <p className="mt-3 text-sm text-zinc-300">{attendanceMessage}</p> : null}
 
-              {!selectedSessionId ? (
-                <p className="mt-5 text-sm text-zinc-400">Create or select a session to mark attendance.</p>
-              ) : attendanceRoster === undefined ? (
-                <p className="mt-5 text-sm text-zinc-400">Loading attendance roster...</p>
-              ) : (
-                <ul className="mt-5 space-y-3">
-                  {attendanceRoster.rows.map((row) => (
-                    <li key={row.enrollment._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <p className="section-kicker">Existing sessions</p>
+                {sortedSessions.length === 0 ? (
+                  <p className="mt-3 text-sm text-zinc-400">No attendance sessions created for this course yet.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2">
+                    {sortedSessions.slice(0, 6).map((session) => (
+                      <li key={session._id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/15 bg-white/5 p-3">
                         <div>
-                          <p className="text-sm font-semibold text-white">{row.student?.fullName ?? "Unknown user"}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.08em] text-zinc-400">
-                            {row.record?.status ?? "unmarked"}
-                          </p>
+                          <p className="text-sm font-semibold text-white">{session.title}</p>
+                          <p className="mt-1 text-xs text-zinc-400">{formatDate(session.startsAt)}</p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(["present", "absent", "late", "excused"] as AttendanceStatus[]).map((status) => {
-                            const busyKey = `${selectedSessionId}-${row.enrollment._id}-${status}`;
-                            return (
-                              <button
-                                key={status}
-                                type="button"
-                                onClick={() => handleMarkAttendance(row.enrollment._id, status)}
-                                disabled={markingAttendanceKey === busyKey}
-                                className="rounded-md border border-white/20 px-2 py-1 text-[11px] font-semibold uppercase text-zinc-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {status}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSessionId(session._id);
+                            setIsAttendanceModalOpen(true);
+                          }}
+                          className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 hover:bg-white/10"
+                        >
+                          Open roster
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </article>
           </section>
         )}
+
+        {isAttendanceModalOpen && selectedSessionId ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+            <section className="max-h-[88vh] w-full max-w-4xl overflow-hidden rounded-xl border border-white/15 bg-zinc-950 shadow-2xl">
+              <header className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 p-5">
+                <div>
+                  <p className="section-kicker">Attendance roster</p>
+                  <h2 className="mt-1 font-display text-2xl font-semibold text-white">
+                    {attendanceRoster?.session.title ?? "Loading session"}
+                  </h2>
+                  {attendanceRoster?.session.startsAt ? (
+                    <p className="mt-1 text-sm text-zinc-400">{formatDate(attendanceRoster.session.startsAt)}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAttendanceModalOpen(false)}
+                  className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </header>
+
+              <div className="max-h-[65vh] overflow-y-auto p-5">
+                {attendanceRoster === undefined ? (
+                  <p className="text-sm text-zinc-400">Loading enrolled users...</p>
+                ) : attendanceRoster.rows.length === 0 ? (
+                  <p className="text-sm text-zinc-400">No users are enrolled in this course.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-white/15">
+                    <table className="w-full min-w-[42rem] text-left text-sm">
+                      <thead className="bg-white/5 text-xs uppercase tracking-[0.08em] text-zinc-400">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold">Student</th>
+                          <th className="px-4 py-3 font-semibold">Current status</th>
+                          <th className="px-4 py-3 font-semibold">Mark</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10">
+                        {attendanceRoster.rows.map((row) => (
+                          <tr key={row.enrollment._id} className="bg-white/[0.02]">
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-white">{row.student?.fullName ?? "Unknown user"}</p>
+                              <p className="mt-1 text-xs text-zinc-400">
+                                {row.student?.enrollmentNumber ?? row.student?.email ?? "No identifier"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-zinc-300">{row.record?.status ?? "unmarked"}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-wrap gap-2">
+                                {(["present", "absent", "late", "excused"] as AttendanceStatus[]).map((status) => {
+                                  const busyKey = `${selectedSessionId}-${row.enrollment._id}-${status}`;
+                                  return (
+                                    <button
+                                      key={status}
+                                      type="button"
+                                      onClick={() => handleMarkAttendance(row.enrollment._id, status)}
+                                      disabled={markingAttendanceKey === busyKey}
+                                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        row.record?.status === status
+                                          ? "border-white/45 bg-white/20 text-white"
+                                          : "border-white/20 text-zinc-200 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      {status}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        ) : null}
       </div>
     </MainLayout>
   );
