@@ -1,9 +1,11 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/auth";
 import { requireRole } from "./lib/rbac";
+import { UTApi } from "uploadthing/server";
 
 async function requireCourseFileManager(ctx: QueryCtx | MutationCtx, courseId: Id<"courses">) {
     const user = await requireUser(ctx);
@@ -289,8 +291,35 @@ export const deleteCourseFile = mutation({
             await requireCourseFileManager(ctx, file.courseId);
         }
 
+        if (file.fileKey) {
+            await ctx.scheduler.runAfter(0, internal.files.deleteUploadthingFiles, {
+                fileKeys: [file.fileKey],
+            });
+        }
+
         await ctx.db.delete(args.fileId);
         return { success: true };
+    },
+});
+
+export const deleteUploadthingFiles = internalAction({
+    args: {
+        fileKeys: v.array(v.string()),
+    },
+    handler: async (_ctx, args) => {
+        const fileKeys = Array.from(new Set(args.fileKeys.filter(Boolean)));
+        if (fileKeys.length === 0) {
+            return { success: true, deleted: 0 };
+        }
+
+        try {
+            const utapi = new UTApi();
+            await utapi.deleteFiles(fileKeys);
+            return { success: true, deleted: fileKeys.length };
+        } catch (error) {
+            console.error("Failed to delete UploadThing files", error);
+            return { success: false, deleted: 0 };
+        }
     },
 });
 
@@ -361,7 +390,7 @@ export const getResourceAccessStats = query({
 
         for (const log of logs) {
             const file = log.fileId ? fileById.get(log.fileId) : null;
-            const key = log.fileId ?? log.url ?? "unknown-resource";
+            const key = file?.resourceGroupId ?? log.fileId ?? log.url ?? "unknown-resource";
             const existing = statsByResource.get(key) ?? {
                 fileId: log.fileId,
                 url: file?.url ?? log.url,

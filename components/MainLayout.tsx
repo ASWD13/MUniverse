@@ -3,6 +3,7 @@
 import ClerkUserButton from "@/components/ClerkUserButton";
 import NotificationBell from "@/components/NotificationBell";
 import { api } from "@/convex/_generated/api";
+import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -66,7 +67,11 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const { isLoaded, isSignedIn } = useAuth();
+  const currentUser = useQuery(
+    api.users.getCurrentUser,
+    isLoaded && isSignedIn ? {} : "skip",
+  );
 
   const resolvedRoleLabel = roleLabel ?? formatRole(currentUser?.role);
   const userName = currentUser?.fullName ?? "MUniverse User";

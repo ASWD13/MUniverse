@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/auth";
 import { requireRole } from "./lib/rbac";
 
@@ -11,9 +13,25 @@ const assessmentTypeValidator = v.union(
   v.literal("quiz")
 );
 
+async function requireEnrollmentGradeAccess(ctx: QueryCtx | MutationCtx, enrollmentId: Id<"enrollments">) {
+  const user = await requireUser(ctx);
+  const enrollment = await ctx.db.get(enrollmentId);
+  if (!enrollment) throw new Error("Enrollment not found");
+  const course = await ctx.db.get(enrollment.courseId);
+  if (!course) throw new Error("Course not found");
+
+  if (user.role === "admin" || course.facultyId === user._id || enrollment.studentId === user._id) {
+    return { user, enrollment, course };
+  }
+
+  throw new Error("Forbidden");
+}
+
 export const getGradesByEnrollment = query({
   args: { enrollmentId: v.id("enrollments") },
   handler: async (ctx, args) => {
+    await requireEnrollmentGradeAccess(ctx, args.enrollmentId);
+
     return await ctx.db
       .query("grades")
       .withIndex("by_enrollmentId", (q) => q.eq("enrollmentId", args.enrollmentId))
@@ -24,6 +42,13 @@ export const getGradesByEnrollment = query({
 export const getGradesByStudent = query({
   args: { studentId: v.id("users"), courseId: v.id("courses") },
   handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) throw new Error("Course not found");
+    if (user.role !== "admin" && course.facultyId !== user._id && args.studentId !== user._id) {
+      throw new Error("Forbidden");
+    }
+
     const enrollment = await ctx.db
       .query("enrollments")
       .withIndex("by_course_student", (q) =>
@@ -150,6 +175,13 @@ export const updateMark = mutation({
 export const getClassGrades = query({
   args: { courseId: v.id("courses") },
   handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) throw new Error("Course not found");
+    if (user.role !== "admin" && course.facultyId !== user._id) {
+      throw new Error("Forbidden");
+    }
+
     const enrollments = await ctx.db
       .query("enrollments")
       .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))

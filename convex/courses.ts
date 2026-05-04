@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/auth";
@@ -85,6 +86,11 @@ function normalizeCourseInput(args: {
 export const getCoursesByFaculty = query({
   args: { facultyId: v.id("users") },
   handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (user.role !== "admin" && user._id !== args.facultyId) {
+      throw new Error("Forbidden");
+    }
+
     return await ctx.db
       .query("courses")
       .withIndex("by_facultyId", (q) => q.eq("facultyId", args.facultyId))
@@ -154,7 +160,24 @@ export const listCoursesForAdmin = query({
 export const getCourseById = query({
   args: { courseId: v.id("courses") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.courseId);
+    const user = await requireUser(ctx);
+    const course = await ctx.db.get(args.courseId);
+    if (!course) return null;
+
+    if (user.role === "admin" || course.facultyId === user._id) {
+      return course;
+    }
+
+    const enrollment = await ctx.db
+      .query("enrollments")
+      .withIndex("by_course_student", (q) => q.eq("courseId", args.courseId).eq("studentId", user._id))
+      .first();
+
+    if (!enrollment) {
+      throw new Error("Forbidden");
+    }
+
+    return course;
   },
 });
 
@@ -316,6 +339,11 @@ export const deleteCourseForAdmin = mutation({
 
     for (const file of files) {
       await ctx.db.delete(file._id);
+    }
+
+    const fileKeys = files.map((file) => file.fileKey).filter((key): key is string => Boolean(key));
+    if (fileKeys.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.files.deleteUploadthingFiles, { fileKeys });
     }
 
     await ctx.db.delete(args.courseId);
