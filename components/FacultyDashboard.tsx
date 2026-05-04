@@ -1088,8 +1088,8 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                                       onClick={() => handleMarkAttendance(row.enrollment._id, status)}
                                       disabled={markingAttendanceKey === busyKey}
                                       className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-60 ${row.record?.status === status
-                                          ? "border-white/45 bg-white/20 text-white"
-                                          : "border-white/20 text-zinc-200 hover:bg-white/10"
+                                        ? "border-white/45 bg-white/20 text-white"
+                                        : "border-white/20 text-zinc-200 hover:bg-white/10"
                                         }`}
                                     >
                                       {status}

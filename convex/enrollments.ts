@@ -65,14 +65,14 @@ export const getCourseRoster = query({
           enrollment,
           student: student
             ? {
-                _id: student._id,
-                fullName: [student.firstName, student.lastName].filter(Boolean).join(" ") || student.email || student.clerkId,
-                role: student.role,
-                email: student.email,
-                enrollmentNumber: student.enrollmentNumber ?? null,
-                employeeId: student.employeeId ?? null,
-                department: student.department ?? null,
-              }
+              _id: student._id,
+              fullName: [student.firstName, student.lastName].filter(Boolean).join(" ") || student.email || student.clerkId,
+              role: student.role,
+              email: student.email,
+              enrollmentNumber: student.enrollmentNumber ?? null,
+              employeeId: student.employeeId ?? null,
+              department: student.department ?? null,
+            }
             : null,
         };
       }),
@@ -82,10 +82,10 @@ export const getCourseRoster = query({
       course,
       faculty: faculty
         ? {
-            _id: faculty._id,
-            fullName: [faculty.firstName, faculty.lastName].filter(Boolean).join(" ") || faculty.email || faculty.clerkId,
-            email: faculty.email,
-          }
+          _id: faculty._id,
+          fullName: [faculty.firstName, faculty.lastName].filter(Boolean).join(" ") || faculty.email || faculty.clerkId,
+          email: faculty.email,
+        }
         : null,
       students: students
         .filter((row) => row.student !== null)
@@ -427,27 +427,27 @@ export const createAttendanceSession = mutation({
       createdAt: Date.now(),
     });
 
-      // Create default 'absent' records for all currently enrolled students
-      const enrollments = await ctx.db
-        .query("enrollments")
-        .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))
-        .collect();
+    // Create default 'absent' records for all currently enrolled students
+    const enrollments = await ctx.db
+      .query("enrollments")
+      .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))
+      .collect();
 
-      await Promise.all(
-        enrollments.map((enrollment) =>
-          ctx.db.insert("attendanceRecords", {
-            sessionId: id,
-            enrollmentId: enrollment._id,
-            studentId: enrollment.studentId,
-            courseId: args.courseId,
-            status: "absent",
-            markedBy: user._id,
-            markedAt: Date.now(),
-          }),
-        ),
-      );
+    await Promise.all(
+      enrollments.map((enrollment) =>
+        ctx.db.insert("attendanceRecords", {
+          sessionId: id,
+          enrollmentId: enrollment._id,
+          studentId: enrollment.studentId,
+          courseId: args.courseId,
+          status: "absent",
+          markedBy: user._id,
+          markedAt: Date.now(),
+        }),
+      ),
+    );
 
-      return { id };
+    return { id };
   },
 });
 
@@ -489,12 +489,12 @@ export const getAttendanceRoster = query({
           enrollment,
           student: student
             ? {
-                _id: student._id,
-                fullName: [student.firstName, student.lastName].filter(Boolean).join(" ") || student.email || student.clerkId,
-                email: student.email,
-                enrollmentNumber: student.enrollmentNumber ?? null,
-                role: student.role,
-              }
+              _id: student._id,
+              fullName: [student.firstName, student.lastName].filter(Boolean).join(" ") || student.email || student.clerkId,
+              email: student.email,
+              enrollmentNumber: student.enrollmentNumber ?? null,
+              role: student.role,
+            }
             : null,
           record: recordByEnrollmentId.get(enrollment._id) ?? null,
         };
