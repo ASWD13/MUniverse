@@ -883,7 +883,7 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                 <p className="mt-5 text-sm text-zinc-400">No users enrolled in this course.</p>
               ) : (
                 <div className="mt-5 overflow-x-auto rounded-lg border border-white/15">
-                  <table className="w-full min-w-[34rem] text-left text-sm">
+                  <table className="w-full min-w-136 text-left text-sm">
                     <thead className="bg-white/5 text-xs uppercase tracking-[0.08em] text-zinc-400">
                       <tr>
                         <th className="px-4 py-3 font-semibold">Name</th>
@@ -894,7 +894,7 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                     </thead>
                     <tbody className="divide-y divide-white/10">
                       {(courseRoster?.students ?? []).map((row) => (
-                        <tr key={row.enrollment._id} className="bg-white/[0.02]">
+                        <tr key={row.enrollment._id} className="bg-white/2">
                           <td className="px-4 py-3">
                             <p className="font-semibold text-white">{row.student?.fullName ?? "Unknown user"}</p>
                             <p className="mt-1 text-xs text-zinc-400">{row.student?.email ?? "No email"}</p>
@@ -1059,7 +1059,7 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                   <p className="text-sm text-zinc-400">No users are enrolled in this course.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-lg border border-white/15">
-                    <table className="w-full min-w-[42rem] text-left text-sm">
+                    <table className="w-full min-w-2xl text-left text-sm">
                       <thead className="bg-white/5 text-xs uppercase tracking-[0.08em] text-zinc-400">
                         <tr>
                           <th className="px-4 py-3 font-semibold">Student</th>
@@ -1069,17 +1069,17 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                       </thead>
                       <tbody className="divide-y divide-white/10">
                         {attendanceRoster.rows.map((row) => (
-                          <tr key={row.enrollment._id} className="bg-white/[0.02]">
+                          <tr key={row.enrollment._id} className="bg-white/2">
                             <td className="px-4 py-3">
                               <p className="font-semibold text-white">{row.student?.fullName ?? "Unknown user"}</p>
                               <p className="mt-1 text-xs text-zinc-400">
                                 {row.student?.enrollmentNumber ?? row.student?.email ?? "No identifier"}
                               </p>
                             </td>
-                            <td className="px-4 py-3 text-zinc-300">{row.record?.status ?? "unmarked"}</td>
+                            <td className="px-4 py-3 text-zinc-300">{row.record?.status ?? "absent"}</td>
                             <td className="px-4 py-3">
                               <div className="flex flex-wrap gap-2">
-                                {(["present", "absent", "late", "excused"] as AttendanceStatus[]).map((status) => {
+                                {(["present", "late", "excused"] as AttendanceStatus[]).map((status) => {
                                   const busyKey = `${selectedSessionId}-${row.enrollment._id}-${status}`;
                                   return (
                                     <button
@@ -1087,11 +1087,10 @@ export default function FacultyDashboard({ viewerName }: FacultyDashboardProps) 
                                       type="button"
                                       onClick={() => handleMarkAttendance(row.enrollment._id, status)}
                                       disabled={markingAttendanceKey === busyKey}
-                                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                                        row.record?.status === status
+                                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition disabled:cursor-not-allowed disabled:opacity-60 ${row.record?.status === status
                                           ? "border-white/45 bg-white/20 text-white"
                                           : "border-white/20 text-zinc-200 hover:bg-white/10"
-                                      }`}
+                                        }`}
                                     >
                                       {status}
                                     </button>

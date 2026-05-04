@@ -427,7 +427,27 @@ export const createAttendanceSession = mutation({
       createdAt: Date.now(),
     });
 
-    return { id };
+      // Create default 'absent' records for all currently enrolled students
+      const enrollments = await ctx.db
+        .query("enrollments")
+        .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))
+        .collect();
+
+      await Promise.all(
+        enrollments.map((enrollment) =>
+          ctx.db.insert("attendanceRecords", {
+            sessionId: id,
+            enrollmentId: enrollment._id,
+            studentId: enrollment.studentId,
+            courseId: args.courseId,
+            status: "absent",
+            markedBy: user._id,
+            markedAt: Date.now(),
+          }),
+        ),
+      );
+
+      return { id };
   },
 });
 
