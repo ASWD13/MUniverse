@@ -27,9 +27,6 @@ export const getMyAssignments = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    if (user.role !== "student" && user.role !== "admin") {
-      throw new Error("Only students or admins can view assignments this way");
-    }
 
     const enrollments = await ctx.db
       .query("enrollments")
@@ -64,8 +61,8 @@ export const uploadAssignment = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    if (user.role !== "faculty") {
-      throw new Error("Only faculty can upload assignments");
+    if (user.role !== "faculty" && user.role !== "admin") {
+      throw new Error("Only faculty and admins can upload assignments");
     }
 
     const course = await ctx.db.get(args.courseId);
@@ -73,8 +70,7 @@ export const uploadAssignment = mutation({
       throw new Error("Course not found");
     }
 
-    // Verify the faculty owns the course
-    if (course.facultyId !== user._id) {
+    if (user.role !== "admin" && course.facultyId !== user._id) {
       throw new Error("You can only upload assignments to your courses");
     }
 
@@ -112,8 +108,8 @@ export const updateAssignment = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    if (user.role !== "faculty") {
-      throw new Error("Only faculty can update assignments");
+    if (user.role !== "faculty" && user.role !== "admin") {
+      throw new Error("Only faculty and admins can update assignments");
     }
 
     const assignment = await ctx.db.get(args.assignmentId);
@@ -121,7 +117,7 @@ export const updateAssignment = mutation({
       throw new Error("Assignment not found");
     }
 
-    if (assignment.createdBy !== user._id) {
+    if (user.role !== "admin" && assignment.createdBy !== user._id) {
       throw new Error("You can only update your own assignments");
     }
 
@@ -142,8 +138,8 @@ export const deleteAssignment = mutation({
   args: { assignmentId: v.id("assignments") },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    if (user.role !== "faculty") {
-      throw new Error("Only faculty can delete assignments");
+    if (user.role !== "faculty" && user.role !== "admin") {
+      throw new Error("Only faculty and admins can delete assignments");
     }
 
     const assignment = await ctx.db.get(args.assignmentId);
@@ -151,7 +147,7 @@ export const deleteAssignment = mutation({
       throw new Error("Assignment not found");
     }
 
-    if (assignment.createdBy !== user._id) {
+    if (user.role !== "admin" && assignment.createdBy !== user._id) {
       throw new Error("You can only delete your own assignments");
     }
 
@@ -181,8 +177,8 @@ export const upsertAssignmentForAdmin = mutation({
 
     const createdBy = args.createdBy ?? course.facultyId;
     const faculty = await ctx.db.get(createdBy);
-    if (!faculty || faculty.role !== "faculty") {
-      throw new Error("createdBy must point to a faculty user");
+    if (!faculty || (faculty.role !== "faculty" && faculty.role !== "admin")) {
+      throw new Error("createdBy must point to a faculty or admin user");
     }
 
     if (!args.title.trim()) {

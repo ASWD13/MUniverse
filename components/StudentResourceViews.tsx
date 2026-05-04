@@ -14,40 +14,11 @@ type PlannerSlot = {
   faculty: string;
 };
 
-type ResourceItem = {
-  title: string;
-  description: string;
-  type: string;
-};
-
 const plannerSlots: PlannerSlot[] = [
   { course: "DBMS", slot: "09:00 - 09:50", room: "Block C, 204", faculty: "Dr. Mehta" },
   { course: "Operating Systems", slot: "11:00 - 11:50", room: "Block A, 112", faculty: "Prof. Sharma" },
   { course: "Computer Networks", slot: "14:00 - 14:50", room: "Block B, 305", faculty: "Dr. Joseph" },
   { course: "AI Lab", slot: "16:00 - 17:30", room: "Innovation Lab", faculty: "Prof. Rao" },
-];
-
-const resources: ResourceItem[] = [
-  {
-    title: "Course repository",
-    description: "Slides, lab sheets, and lecture recordings from all registered courses.",
-    type: "Learning",
-  },
-  {
-    title: "Exam prep kit",
-    description: "Past papers, model answers, and unit-wise revision checklist.",
-    type: "Assessment",
-  },
-  {
-    title: "Mentor office hours",
-    description: "Book a support slot with your allocated faculty mentor.",
-    type: "Mentoring",
-  },
-  {
-    title: "Skill bridge",
-    description: "Practice sets and aptitude modules for internship preparation.",
-    type: "Career",
-  },
 ];
 
 type StudentResourceShellProps = {
@@ -95,6 +66,22 @@ function StudentResourceShell(props: StudentResourceShellProps) {
 }
 
 export function StudentPlannerView() {
+  const myEnrollments = useQuery(api.enrollments.getMyEnrollments, {});
+  const courseSlots = (myEnrollments ?? []).flatMap((enrollment) => {
+    const course = enrollment.course;
+    if (!course) {
+      return [];
+    }
+
+    return (course.timetable ?? []).map((slot) => ({
+      course: `${course.courseCode} · ${course.title}`,
+      slot: `${slot.day}, ${slot.startTime} - ${slot.endTime}`,
+      room: slot.room ?? "Room TBA",
+      faculty: slot.label ?? "Assigned faculty",
+    }));
+  });
+  const visibleSlots = courseSlots.length > 0 ? courseSlots : plannerSlots;
+
   return (
     <StudentResourceShell
       kicker="Planner"
@@ -102,7 +89,7 @@ export function StudentPlannerView() {
       description="Expanded class flow with room, slot, and faculty context for your day."
     >
       <div className="grid gap-3 lg:grid-cols-2">
-        {plannerSlots.map((slot) => (
+        {visibleSlots.map((slot) => (
           <article key={`${slot.course}-${slot.slot}`} className="rounded-lg border border-white/15 bg-white/5 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">{slot.course}</p>
             <p className="mt-2 text-sm font-semibold text-white">{slot.slot}</p>
@@ -282,11 +269,13 @@ export function StudentResourcesView() {
   const [searchQuery, setSearchQuery] = useState("");
   const logSearchQuery = useMutation(api.search.logSearchQuery);
   const logResourceAccess = useMutation(api.files.logResourceAccess);
+  const courseFiles = useQuery(api.files.getMyCourseFiles, {});
 
-  const filteredResources = resources.filter(res => 
-    res.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    res.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    res.type.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredResources = (courseFiles ?? []).filter(res => 
+    (res.title ?? res.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (res.description ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (res.course?.courseCode ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (res.course?.title ?? "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -295,10 +284,11 @@ export function StudentResourcesView() {
 
     const timeout = window.setTimeout(() => {
       const startedAt = performance.now();
-      const resultCount = resources.filter((resource) =>
-        resource.title.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
-        resource.description.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
-        resource.type.toLowerCase().includes(trimmedQuery.toLowerCase()),
+      const resultCount = (courseFiles ?? []).filter((resource) =>
+        (resource.title ?? resource.name ?? "").toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        (resource.description ?? "").toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        (resource.course?.courseCode ?? "").toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        (resource.course?.title ?? "").toLowerCase().includes(trimmedQuery.toLowerCase()),
       ).length;
       const latencyMs = Math.round(performance.now() - startedAt);
 
@@ -312,7 +302,7 @@ export function StudentResourcesView() {
     }, 450);
 
     return () => window.clearTimeout(timeout);
-  }, [logSearchQuery, searchQuery]);
+  }, [courseFiles, logSearchQuery, searchQuery]);
 
   return (
     <StudentResourceShell
@@ -335,29 +325,37 @@ export function StudentResourcesView() {
         />
       </div>
 
-      {filteredResources.length === 0 ? (
+      {courseFiles === undefined ? (
+        <div className="py-10 text-center text-zinc-400">
+          <p>Loading course materials...</p>
+        </div>
+      ) : filteredResources.length === 0 ? (
         <div className="py-10 text-center text-zinc-400">
           <p>No materials found matching &quot;{searchQuery}&quot;.</p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {filteredResources.map((resource) => (
-            <article key={resource.title} className="rounded-lg border border-white/15 bg-white/5 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">{resource.type}</p>
-              <p className="mt-2 text-sm font-semibold text-white">{resource.title}</p>
-              <p className="mt-2 text-sm text-zinc-300">{resource.description}</p>
-              <button
-                type="button"
+            <article key={resource._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
+              <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
+                {resource.course?.courseCode ?? "Course"}
+              </p>
+              <p className="mt-2 text-sm font-semibold text-white">{resource.title ?? resource.name ?? "Course resource"}</p>
+              {resource.description ? <p className="mt-2 text-sm text-zinc-300">{resource.description}</p> : null}
+              <a
+                href={resource.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => {
                   void logResourceAccess({
-                    fileName: resource.title,
+                    fileId: resource._id,
                     accessType: "view",
                   });
                 }}
                 className="mt-4 inline-flex rounded-md border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
               >
                 Open resource
-              </button>
+              </a>
             </article>
           ))}
         </div>

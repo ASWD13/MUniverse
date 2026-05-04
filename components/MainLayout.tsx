@@ -81,7 +81,7 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
   const isStudentWorkspace = selectedWorkspace === "student";
   const isFacultyWorkspace = selectedWorkspace === "faculty";
   const isAdminWorkspace = selectedWorkspace === "admin";
-  
+
   const effectiveNavItems = [
     { label: "Dashboard", href: "/dashboard" },
     ...(isStudentWorkspace ? studentNavItems : []),
@@ -98,7 +98,7 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
     const [basePath, search] = href.split("?");
     const params = new URLSearchParams(search || "");
     params.set("workspace", workspaceOverride);
-    
+
     return `${basePath}?${params.toString()}`;
   };
 
@@ -135,12 +135,12 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
             {effectiveNavItems.map((item) => {
               const url = new URL(item.href, "http://localhost");
               const itemTab = url.searchParams.get("tab");
-               
-              const isActive = pathname === url.pathname && 
+
+              const isActive = pathname === url.pathname &&
                 (url.pathname === "/dashboard" && item.label !== "Profile"
                   ? (itemTab ? searchParams.get("tab") === itemTab : (!searchParams.has("tab") || searchParams.get("tab") === "announcements"))
                   : true);
-                  
+
               const href = withWorkspaceContext(item.href);
 
               return (
@@ -225,14 +225,3 @@ function MainLayoutContent({ children, roleLabel }: MainLayoutProps) {
     </div >
   );
 }
-<<<<<<< HEAD
-
-export default function MainLayout(props: MainLayoutProps) {
-  return (
-    <Suspense fallback={<div className="h-dvh bg-black" />}>
-      <MainLayoutContent {...props} />
-    </Suspense>
-  );
-}
-=======
->>>>>>> d4eaed3 (moved faculty dashboard tabs to sidebar)

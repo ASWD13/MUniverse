@@ -6,6 +6,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import MainLayout from "./MainLayout";
 import { FormInput, PrimaryButton } from "./UIElements";
+import CourseManagement from "./CourseManagement";
 
 type AdminDashboardProps = {
   viewerName?: string;
@@ -329,6 +330,8 @@ export default function AdminDashboard({ viewerName }: AdminDashboardProps) {
             )}
           </article>
         </section>
+
+        <CourseManagement />
 
         <section className="surface-card p-5 md:p-6">
           <header className="flex flex-wrap items-center justify-between gap-2">

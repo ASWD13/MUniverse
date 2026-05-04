@@ -1,32 +1,72 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { useUploadThing } from "@/utils/uploadthing";
 import MainLayout from "./MainLayout";
-import { FormInput, PrimaryButton } from "./UIElements";
+import { FormInput, PrimaryButton, SecondaryButton } from "./UIElements";
 
-type ResourceType = "PDF" | "DOC" | "PPTX" | "VIDEO";
-type VisibilityScope = "All" | "Program: B.Tech CSE" | "Class: CN-202" | "Section: B";
-
-type Resource = {
-  id: number;
+type ManagedCourse = {
+  _id: Id<"courses">;
+  courseCode: string;
   title: string;
-  course: string;
-  type: ResourceType;
-  scope: VisibilityScope;
-  uploadedBy: "faculty" | "admin";
-  date: string;
-  size: string;
 };
 
-const INITIAL_RESOURCES: Resource[] = [
-  { id: 1, title: "Computer Networks – Module 1 Notes", course: "CS301", type: "PDF", scope: "Class: CN-202", uploadedBy: "faculty", date: "28 Apr 2026, 9:00 am", size: "2.4 MB" },
-  { id: 2, title: "Data Structures Lab Manual", course: "CS201", type: "PDF", scope: "Program: B.Tech CSE", uploadedBy: "faculty", date: "25 Apr 2026, 11:30 am", size: "5.1 MB" },
-  { id: 3, title: "Software Engineering Syllabus 2026", course: "CS401", type: "DOC", scope: "All", uploadedBy: "admin", date: "20 Apr 2026, 3:15 pm", size: "340 KB" },
-  { id: 4, title: "OS Lecture Slides – Week 6", course: "CS302", type: "PPTX", scope: "Class: CN-202", uploadedBy: "faculty", date: "18 Apr 2026, 8:45 am", size: "8.2 MB" },
-  { id: 5, title: "DBMS Assignment 3 — ER Diagrams", course: "CS203", type: "PDF", scope: "Section: B", uploadedBy: "faculty", date: "15 Apr 2026, 5:00 pm", size: "1.1 MB" },
-];
+type ManagedFile = {
+  _id: Id<"files">;
+  resourceGroupId?: string;
+  title?: string;
+  description?: string;
+  name?: string;
+  size?: number;
+  url: string;
+  uploadedAt: number;
+  uploadedByName: string;
+  course: ManagedCourse | null;
+};
 
-const FILE_TYPES: ResourceType[] = ["PDF", "DOC", "PPTX", "VIDEO"];
+type ResourceEntry = {
+  id: string;
+  title: string;
+  description?: string;
+  uploadedAt: number;
+  uploadedByName: string;
+  course: ManagedCourse | null;
+  totalSize: number;
+  files: ManagedFile[];
+};
+
+type PendingUpload = {
+  id: string;
+  file: File;
+  name: string;
+  size?: number;
+  progress: number;
+  status: "pending" | "uploading" | "uploaded" | "saved" | "error";
+  error?: string;
+};
+
+type UploadedCourseFile = {
+  fileKey?: string;
+  url: string;
+  name?: string;
+  size?: number;
+};
+
+function formatDate(timestamp: number) {
+  return new Date(timestamp).toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatSize(bytes?: number) {
+  if (!bytes) return "Size unavailable";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
@@ -38,257 +78,460 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
 }
 
 export default function ResourceManagement() {
-  const [resources, setResources] = useState<Resource[]>(INITIAL_RESOURCES);
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<"all" | ResourceType>("all");
-  const [title, setTitle] = useState("");
-  const [course, setCourse] = useState("");
-  const [scope, setScope] = useState<VisibilityScope>("All");
-  const [fileType, setFileType] = useState<ResourceType>("PDF");
-  const [uploadedBy, setUploadedBy] = useState<"faculty" | "admin">("faculty");
-  const [isUploading, setIsUploading] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  const currentUser = useQuery(api.users.getCurrentUser);
+  const courses = useQuery(api.courses.getMyManagedCourses) as ManagedCourse[] | undefined;
+  const storeCourseFile = useMutation(api.files.storeCourseFile);
+  const deleteCourseFile = useMutation(api.files.deleteCourseFile);
 
-  const filtered = resources.filter((r) => {
-    const matchSearch =
-      r.title.toLowerCase().includes(search.toLowerCase()) ||
-      r.course.toLowerCase().includes(search.toLowerCase());
-    const matchType = filterType === "all" || r.type === filterType;
-    return matchSearch && matchType;
+  const [selectedCourseId, setSelectedCourseId] = useState<Id<"courses"> | "">("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<Id<"files"> | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openEntry, setOpenEntry] = useState<ResourceEntry | null>(null);
+  const activeUploadIdRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const files = useQuery(
+    api.files.getManagedCourseFiles,
+    selectedCourseId ? { courseId: selectedCourseId } : {},
+  ) as ManagedFile[] | undefined;
+
+  const selectedCourse = courses?.find((course) => course._id === selectedCourseId) ?? null;
+  const resourceEntries = useMemo(() => {
+    const entriesById = new Map<string, ResourceEntry>();
+
+    for (const file of files ?? []) {
+      const fallbackKey = [
+        file.course?._id ?? "no-course",
+        file.title ?? file.name ?? "Course resource",
+        file.description ?? "",
+        file.uploadedByName,
+      ].join("|");
+      const entryId = file.resourceGroupId ?? fallbackKey;
+      const existing = entriesById.get(entryId);
+
+      if (existing) {
+        existing.files.push(file);
+        existing.totalSize += file.size ?? 0;
+        existing.uploadedAt = Math.max(existing.uploadedAt, file.uploadedAt);
+      } else {
+        entriesById.set(entryId, {
+          id: entryId,
+          title: file.title ?? file.name ?? "Course resource",
+          description: file.description,
+          uploadedAt: file.uploadedAt,
+          uploadedByName: file.uploadedByName,
+          course: file.course,
+          totalSize: file.size ?? 0,
+          files: [file],
+        });
+      }
+    }
+
+    return Array.from(entriesById.values()).sort((left, right) => right.uploadedAt - left.uploadedAt);
+  }, [files]);
+
+  const filteredEntries = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return resourceEntries.filter((entry) => {
+      if (!query) return true;
+      return [
+        entry.title,
+        entry.description,
+        entry.course?.courseCode,
+        entry.course?.title,
+        entry.uploadedByName,
+        ...entry.files.map((file) => file.name),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [resourceEntries, search]);
+
+  const roleLabel = currentUser?.role
+    ? `${currentUser.role[0].toUpperCase()}${currentUser.role.slice(1)}`
+    : "Admin";
+
+  const { startUpload } = useUploadThing("courseResourceUploader", {
+    uploadProgressGranularity: "fine",
+    onUploadProgress: (progress) => {
+      const activeId = activeUploadIdRef.current;
+      if (!activeId) return;
+
+      setPendingUploads((current) =>
+        current.map((file) =>
+          file.id === activeId ? { ...file, progress, status: "uploading" } : file,
+        ),
+      );
+    },
+    onUploadError: (error) => {
+      const activeId = activeUploadIdRef.current;
+      if (!activeId) return;
+
+      setPendingUploads((current) =>
+        current.map((file) =>
+          file.id === activeId
+            ? { ...file, status: "error", error: error.message, progress: file.progress || 0 }
+            : file,
+        ),
+      );
+    },
   });
 
-  const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!title.trim() || !course.trim()) {
-      setFormError("Title and course code are required.");
+  const handleSelectFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files ?? []);
+    if (selectedFiles.length === 0) {
       return;
     }
-    setFormError(null);
-    setIsUploading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setResources((prev) => [
-      {
-        id: Date.now(),
-        title: title.trim(),
-        course: course.trim().toUpperCase(),
-        type: fileType,
-        scope,
-        uploadedBy,
-        date: "1 May 2026, just now",
-        size: "—",
-      },
-      ...prev,
-    ]);
-    setTitle("");
-    setCourse("");
-    setIsUploading(false);
+
+    const now = Date.now();
+    const nextFiles = selectedFiles.map((file, index) => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${now}-${index}`,
+      file,
+      name: file.name,
+      size: file.size,
+      progress: 0,
+      status: "pending" as const,
+    }));
+
+    setPendingUploads((current) => [...current, ...nextFiles]);
+    setStatus(`${nextFiles.length} file${nextFiles.length === 1 ? "" : "s"} added to pending files.`);
+    event.target.value = "";
   };
 
-  const handleDelete = async (id: number) => {
-    setIsDeleting(id);
-    await new Promise((r) => setTimeout(r, 400));
-    setResources((prev) => prev.filter((r) => r.id !== id));
-    setIsDeleting(null);
+  const handleSubmitResource = async () => {
+    setStatus(null);
+
+    if (!selectedCourseId) {
+      setStatus("Choose a course before submitting the resource.");
+      return;
+    }
+
+    if (pendingUploads.length === 0) {
+      setStatus("Choose at least one file before submitting.");
+      return;
+    }
+
+    const resourceTitle = title.trim();
+    if (!resourceTitle) {
+      setStatus("Resource title is required.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const uploadedFiles: UploadedCourseFile[] = [];
+      const resourceGroupId = `resource-${selectedCourseId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      for (const pendingFile of pendingUploads) {
+        if (pendingFile.status === "saved") {
+          continue;
+        }
+
+        activeUploadIdRef.current = pendingFile.id;
+        setPendingUploads((current) =>
+          current.map((file) =>
+            file.id === pendingFile.id
+              ? { ...file, status: "uploading", progress: Math.max(file.progress, 1), error: undefined }
+              : file,
+          ),
+        );
+
+        const uploaded = await startUpload([pendingFile.file]);
+        const uploadedFile = uploaded?.[0];
+
+        const url =
+          uploadedFile && "ufsUrl" in uploadedFile && typeof uploadedFile.ufsUrl === "string"
+            ? uploadedFile.ufsUrl
+            : uploadedFile && "url" in uploadedFile && typeof uploadedFile.url === "string"
+              ? uploadedFile.url
+              : "";
+
+        if (!uploadedFile || !url) {
+          throw new Error(`Upload failed for ${pendingFile.name}`);
+        }
+
+        const fileKey = "key" in uploadedFile && typeof uploadedFile.key === "string" ? uploadedFile.key : undefined;
+        const name = "name" in uploadedFile && typeof uploadedFile.name === "string" ? uploadedFile.name : pendingFile.name;
+        const size = "size" in uploadedFile && typeof uploadedFile.size === "number" ? uploadedFile.size : pendingFile.size;
+
+        setPendingUploads((current) =>
+          current.map((file) =>
+            file.id === pendingFile.id ? { ...file, status: "uploaded", progress: 100 } : file,
+          ),
+        );
+
+        await storeCourseFile({
+          courseId: selectedCourseId,
+          resourceGroupId,
+          fileKey,
+          url,
+          title: resourceTitle,
+          description: description.trim() || undefined,
+          name,
+          size,
+        });
+
+        setPendingUploads((current) =>
+          current.map((file) =>
+            file.id === pendingFile.id ? { ...file, status: "saved", progress: 100 } : file,
+          ),
+        );
+
+        uploadedFiles.push({ fileKey, url, name, size });
+      }
+
+      setStatus(
+        `Submitted ${uploadedFiles.length} file${uploadedFiles.length === 1 ? "" : "s"} to ${selectedCourse?.courseCode ?? "course"}.`,
+      );
+      setTitle("");
+      setDescription("");
+      setPendingUploads([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to submit resource.");
+    } finally {
+      activeUploadIdRef.current = null;
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <MainLayout roleLabel="Admin">
+    <MainLayout roleLabel={roleLabel}>
       <div className="w-full space-y-6">
-
-        {/* Header */}
         <header className="surface-card motion-enter p-6 md:p-7">
           <p className="section-kicker">Resource Management</p>
           <h1 className="mt-2 font-display text-3xl font-semibold text-white md:text-4xl">
-            Academic Resource Library
+            Course Resource Library
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-300">
-            Upload, manage, and organise course materials across programs, sections, and schools.
+            Upload files to courses you manage. Enrolled students will see these resources on their dashboard.
           </p>
         </header>
 
-        {/* Stat cards */}
         <section className="grid gap-4 md:grid-cols-4">
-          <StatCard label="Total Resources" value={resources.length} />
-          <StatCard label="PDFs" value={resources.filter((r) => r.type === "PDF").length} />
-          <StatCard label="Courses Covered" value={new Set(resources.map((r) => r.course)).size} />
-          <StatCard label="Uploaded by Admin" value={resources.filter((r) => r.uploadedBy === "admin").length} />
+          <StatCard label="Managed Courses" value={courses?.length ?? 0} />
+          <StatCard label="Resource Entries" value={resourceEntries.length} />
+          <StatCard label="Filtered Results" value={filteredEntries.length} />
+          <StatCard label="Workspace" value={roleLabel} />
         </section>
 
-        {/* Upload + Browser */}
         <section className="grid gap-6 lg:grid-cols-[0.95fr_1.35fr]">
-
-          {/* Upload panel */}
           <article className="surface-card p-5 md:p-6">
             <header>
-              <p className="section-kicker">Upload Interface</p>
-              <h2 className="mt-1 font-display text-2xl font-semibold text-white">Add Resource</h2>
-              <p className="mt-2 text-sm text-zinc-300">
-                Attach a file and assign it to a course or visibility scope.
-              </p>
+              <p className="section-kicker">Upload</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold text-white">Add course file</h2>
             </header>
 
-            <form onSubmit={handleUpload} className="mt-5 space-y-4">
-              <FormInput
-                label="Resource Title"
-                placeholder="e.g., Module 4 Lecture Notes"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-
-              <FormInput
-                label="Course Code"
-                placeholder="e.g., CS301"
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
-              />
-
-              <fieldset className="space-y-2">
-                <legend className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
-                  File Type
-                </legend>
-                <div className="flex flex-wrap gap-2">
-                  {FILE_TYPES.map((t) => (
-                    <label
-                      key={t}
-                      className={`inline-flex cursor-pointer items-center rounded-full border px-3 py-1.5 text-xs font-medium uppercase tracking-[0.08em] ${
-                        fileType === t
-                          ? "border-white/50 bg-white/18 text-white"
-                          : "border-white/20 bg-white/5 text-zinc-300 hover:bg-white/10"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="fileType"
-                        value={t}
-                        checked={fileType === t}
-                        onChange={() => setFileType(t)}
-                        className="sr-only"
-                      />
-                      {t}
-                    </label>
+            <div className="mt-5 space-y-4">
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Course</span>
+                <select
+                  value={selectedCourseId}
+                  onChange={(event) => setSelectedCourseId(event.target.value as Id<"courses"> | "")}
+                  className="h-10 w-full cursor-pointer rounded-md border border-white/20 bg-white/10 px-3 text-sm text-white outline-none transition hover:bg-white/16 focus:border-white/45 focus:ring-2 focus:ring-white/20"
+                >
+                  <option value="">Choose a course</option>
+                  {(courses ?? []).map((course) => (
+                    <option key={course._id} value={course._id}>
+                      {course.courseCode} · {course.title}
+                    </option>
                   ))}
-                </div>
-              </fieldset>
-
-              <label className="block space-y-1">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
-                  Visibility Scope
-                </span>
-                <select
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value as VisibilityScope)}
-                  className="h-10 w-full cursor-pointer rounded-md border border-white/20 bg-white/10 px-3 text-sm text-white outline-none transition hover:bg-white/16 focus:border-white/45 focus:ring-2 focus:ring-white/20"
-                >
-                  <option value="All">All Users</option>
-                  <option value="Program: B.Tech CSE">Program: B.Tech CSE</option>
-                  <option value="Class: CN-202">Class: CN-202</option>
-                  <option value="Section: B">Section: B</option>
                 </select>
               </label>
 
+              <FormInput
+                label="Resource title"
+                placeholder="e.g., Module 4 lecture notes"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+
               <label className="block space-y-1">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
-                  Uploaded By
-                </span>
-                <select
-                  value={uploadedBy}
-                  onChange={(e) => setUploadedBy(e.target.value as "faculty" | "admin")}
-                  className="h-10 w-full cursor-pointer rounded-md border border-white/20 bg-white/10 px-3 text-sm text-white outline-none transition hover:bg-white/16 focus:border-white/45 focus:ring-2 focus:ring-white/20"
-                >
-                  <option value="faculty">Faculty</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-
-              <div className="rounded-lg border border-dashed border-white/20 bg-white/3 px-4 py-8 text-center">
-                <p className="text-sm text-zinc-400">Drop file here or click to browse</p>
-                <p className="mt-1 text-xs text-zinc-500">PDF, DOCX, PPTX, MP4 — max 50 MB</p>
-              </div>
-
-              {formError ? (
-                <p className="text-sm font-medium text-zinc-200">{formError}</p>
-              ) : null}
-
-              <PrimaryButton className="w-full" type="submit" disabled={isUploading}>
-                {isUploading ? "Uploading..." : "Upload Resource"}
-              </PrimaryButton>
-            </form>
-          </article>
-
-          {/* Resource browser */}
-          <article className="surface-card p-5 md:p-6">
-            <header>
-              <p className="section-kicker">Resource Browser</p>
-              <h2 className="mt-1 font-display text-2xl font-semibold text-white">All Resources</h2>
-              <p className="mt-2 text-sm text-zinc-300">
-                Search and filter academic materials by title or course code.
-              </p>
-            </header>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
-              <label className="block space-y-1">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Search</span>
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by title or course code"
-                  className="h-10 w-full rounded-md border border-white/20 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20"
+                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Description</span>
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20"
                 />
               </label>
+
+              <section className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Pending files</p>
+                    <p className="mt-1 text-xs text-zinc-500">Selected files and upload progress appear here before the resource is saved.</p>
+                  </div>
+                  {pendingUploads.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setPendingUploads([])}
+                      disabled={isSubmitting}
+                      className="h-8 rounded-md border border-white/20 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+
+                {pendingUploads.length === 0 ? (
+                  <p className="mt-4 rounded-md border border-dashed border-white/15 bg-black/20 px-3 py-4 text-center text-sm text-zinc-400">
+                    No files selected for this resource yet.
+                  </p>
+                ) : (
+                  <ul className="mt-4 space-y-2">
+                    {pendingUploads.map((file) => (
+                      <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">{file.name ?? "Uploaded file"}</p>
+                          <p className="text-xs text-zinc-400">
+                            {formatSize(file.size)} · {file.status === "pending" ? "Waiting" : file.status === "uploading" ? `Uploading ${Math.round(file.progress)}%` : file.status === "uploaded" ? "Saving" : file.status === "saved" ? "Saved" : "Failed"}
+                          </p>
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
+                            <div
+                              className="h-full rounded-full bg-white transition-all"
+                              style={{ width: `${Math.max(0, Math.min(100, file.progress))}%` }}
+                            />
+                          </div>
+                          {file.error ? <p className="mt-1 text-xs text-red-300">{file.error}</p> : null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPendingUploads((current) => current.filter((item) => item.id !== file.id))}
+                            disabled={isSubmitting || file.status === "uploading"}
+                            className="h-8 rounded-md border border-white/20 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                <div className="rounded-lg border border-dashed border-white/20 bg-black/20 px-4 py-8 text-center">
+                  <span className="block text-sm font-semibold text-white">Choose files</span>
+                  <span className="mt-1 block text-xs text-zinc-500">Files are added to pending list and upload only after Submit Resource.</span>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSubmitting}
+                    className="mt-4 inline-flex h-10 cursor-pointer items-center justify-center rounded-md border border-white/25 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/16 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Select Files
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleSelectFiles}
+                    disabled={isSubmitting}
+                    className="sr-only"
+                  />
+                </div>
+              </div>
+
+              <PrimaryButton
+                className="w-full"
+                onClick={handleSubmitResource}
+                disabled={isSubmitting || !selectedCourseId || pendingUploads.length === 0}
+              >
+                {isSubmitting ? "Submitting..." : "Submit Resource"}
+              </PrimaryButton>
+
+              {status ? <p className="text-sm font-medium text-zinc-200">{status}</p> : null}
+            </div>
+          </article>
+
+          <article className="surface-card p-5 md:p-6">
+            <header>
+              <p className="section-kicker">Browser</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold text-white">Uploaded files</h2>
+            </header>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
+              <FormInput
+                label="Search"
+                placeholder="Search by title, course, uploader"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
               <label className="block space-y-1">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Type filter</span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Course filter</span>
                 <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value as "all" | ResourceType)}
+                  value={selectedCourseId}
+                  onChange={(event) => setSelectedCourseId(event.target.value as Id<"courses"> | "")}
                   className="h-10 w-full cursor-pointer rounded-md border border-white/20 bg-white/10 px-3 text-sm text-white outline-none transition hover:bg-white/16 focus:border-white/45 focus:ring-2 focus:ring-white/20"
                 >
-                  <option value="all">all types</option>
-                  <option value="PDF">PDF</option>
-                  <option value="DOC">DOC</option>
-                  <option value="PPTX">PPTX</option>
-                  <option value="VIDEO">VIDEO</option>
+                  <option value="">All managed courses</option>
+                  {(courses ?? []).map((course) => (
+                    <option key={course._id} value={course._id}>
+                      {course.courseCode}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
 
-            <p className="mt-3 text-xs text-zinc-400">
-              Showing {filtered.length} of {resources.length} resources
-            </p>
-
-            {filtered.length === 0 ? (
-              <p className="mt-5 text-sm text-zinc-400">No resources match your search.</p>
+            {files === undefined ? (
+              <p className="mt-5 text-sm text-zinc-400">Loading files...</p>
+            ) : filteredEntries.length === 0 ? (
+              <p className="mt-5 text-sm text-zinc-400">No resources match this view.</p>
             ) : (
-              <ul className="mt-4 space-y-3">
-                {filtered.map((r) => (
-                  <li key={r.id} className="rounded-lg border border-white/15 bg-white/5 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 space-y-1">
-                        <h3 className="font-display text-base font-semibold text-white">{r.title}</h3>
-                        <p className="text-xs text-zinc-400">Updated {r.date} · {r.size}</p>
-                        <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.08em]">
-                          <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-zinc-200">
-                            {r.course}
-                          </span>
-                          <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-zinc-200">
-                            {r.type}
-                          </span>
-                          <span className="rounded-full border border-white/20 bg-white/6 px-2 py-0.5 text-zinc-300">
-                            {r.uploadedBy}
-                          </span>
-                          <span className="rounded-full border border-white/20 bg-white/6 px-2 py-0.5 text-zinc-300">
-                            {r.scope}
-                          </span>
-                        </div>
+              <ul className="mt-5 space-y-3">
+                {filteredEntries.map((entry) => (
+                  <li key={entry.id} className="rounded-lg border border-white/15 bg-white/5 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-display text-base font-semibold text-white">
+                          {entry.title}
+                        </h3>
+                        <p className="mt-1 text-xs text-zinc-400">
+                          {entry.course ? `${entry.course.courseCode} · ${entry.course.title}` : "No course"} · {entry.files.length} file{entry.files.length === 1 ? "" : "s"} · {formatSize(entry.totalSize)} · {formatDate(entry.uploadedAt)}
+                        </p>
+                        {entry.description ? <p className="mt-2 text-sm text-zinc-300">{entry.description}</p> : null}
+                        <p className="mt-2 text-xs text-zinc-500">Uploaded by {entry.uploadedByName}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(r.id)}
-                        disabled={isDeleting === r.id}
-                        className="h-8 cursor-pointer rounded-md border border-white/25 px-3 text-xs font-medium text-white transition hover:bg-white/12 active:bg-white/18 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {isDeleting === r.id ? "Deleting..." : "Delete"}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setOpenEntry(entry)}
+                          className="inline-flex h-8 items-center rounded-md border border-white/20 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                        >
+                          Open
+                        </button>
+                        <SecondaryButton
+                          className="h-8 px-3 text-xs"
+                          disabled={entry.files.some((file) => deletingId === file._id)}
+                          onClick={async () => {
+                            try {
+                              for (const file of entry.files) {
+                                setDeletingId(file._id);
+                                await deleteCourseFile({ fileId: file._id });
+                              }
+                              setStatus("Resource removed.");
+                            } catch (error) {
+                              setStatus(error instanceof Error ? error.message : "Unable to delete resource.");
+                            } finally {
+                              setDeletingId(null);
+                            }
+                          }}
+                        >
+                          {entry.files.some((file) => deletingId === file._id) ? "Deleting..." : "Delete"}
+                        </SecondaryButton>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -296,6 +539,52 @@ export default function ResourceManagement() {
             )}
           </article>
         </section>
+
+        {openEntry ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+            <section className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-white/15 bg-zinc-950 p-5 shadow-2xl">
+              <header className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
+                <div>
+                  <p className="section-kicker">Resource Files</p>
+                  <h2 className="mt-1 font-display text-2xl font-semibold text-white">{openEntry.title}</h2>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    {openEntry.course ? `${openEntry.course.courseCode} · ${openEntry.course.title}` : "No course"} · {openEntry.files.length} file{openEntry.files.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenEntry(null)}
+                  className="h-9 rounded-md border border-white/20 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </header>
+
+              {openEntry.description ? (
+                <p className="mt-4 text-sm text-zinc-300">{openEntry.description}</p>
+              ) : null}
+
+              <ul className="mt-5 space-y-3">
+                {openEntry.files.map((file) => (
+                  <li key={file._id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/15 bg-white/5 p-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{file.name ?? file.title ?? "Course file"}</p>
+                      <p className="mt-1 text-xs text-zinc-400">{formatSize(file.size)} · {formatDate(file.uploadedAt)}</p>
+                    </div>
+                    <a
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-8 items-center rounded-md border border-white/20 px-3 text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      Open file
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        ) : null}
       </div>
     </MainLayout>
   );

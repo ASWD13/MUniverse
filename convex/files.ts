@@ -1,8 +1,24 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/auth";
 import { requireRole } from "./lib/rbac";
+
+async function requireCourseFileManager(ctx: QueryCtx | MutationCtx, courseId: Id<"courses">) {
+    const user = await requireUser(ctx);
+    const course = await ctx.db.get(courseId);
+
+    if (!course) {
+        throw new Error("Course not found");
+    }
+
+    if (user.role !== "admin" && !(user.role === "faculty" && course.facultyId === user._id)) {
+        throw new Error("Forbidden");
+    }
+
+    return { user, course };
+}
 
 async function upsertFileRecord(
     ctx: MutationCtx,
@@ -10,6 +26,11 @@ async function upsertFileRecord(
         fileKey?: string;
         url: string;
         clerkId: string;
+        uploadedByUserId?: Id<"users">;
+        courseId?: Id<"courses">;
+        resourceGroupId?: string;
+        title?: string;
+        description?: string;
         name?: string;
         size?: number;
     },
@@ -23,6 +44,11 @@ async function upsertFileRecord(
         await ctx.db.patch(existingByUrl._id, {
             fileKey: args.fileKey ?? existingByUrl.fileKey,
             clerkId: args.clerkId,
+            uploadedByUserId: args.uploadedByUserId ?? existingByUrl.uploadedByUserId,
+            courseId: args.courseId ?? existingByUrl.courseId,
+            resourceGroupId: args.resourceGroupId ?? existingByUrl.resourceGroupId,
+            title: args.title ?? existingByUrl.title,
+            description: args.description ?? existingByUrl.description,
             name: args.name ?? existingByUrl.name,
             size: args.size ?? existingByUrl.size,
             uploadedAt: Date.now(),
@@ -35,6 +61,11 @@ async function upsertFileRecord(
         fileKey: args.fileKey ?? undefined,
         url: args.url,
         clerkId: args.clerkId,
+        uploadedByUserId: args.uploadedByUserId,
+        courseId: args.courseId,
+        resourceGroupId: args.resourceGroupId,
+        title: args.title,
+        description: args.description,
         name: args.name ?? undefined,
         size: args.size ?? undefined,
         uploadedAt: Date.now(),
@@ -60,6 +91,42 @@ export const storeFileForCurrentUser = mutation({
             fileKey: args.fileKey,
             url: args.url,
             clerkId: identity.subject,
+            name: args.name,
+            size: args.size,
+        });
+    },
+});
+
+export const storeCourseFile = mutation({
+    args: {
+        courseId: v.id("courses"),
+        resourceGroupId: v.optional(v.string()),
+        fileKey: v.optional(v.string()),
+        url: v.string(),
+        title: v.string(),
+        description: v.optional(v.string()),
+        name: v.optional(v.string()),
+        size: v.optional(v.number()),
+    },
+    handler: async (ctx, args) => {
+        const { user } = await requireCourseFileManager(ctx, args.courseId);
+
+        const title = args.title.trim() || args.name?.trim() || "Course resource";
+        const url = args.url.trim();
+
+        if (!url) {
+            throw new Error("File URL is required");
+        }
+
+        return upsertFileRecord(ctx, {
+            fileKey: args.fileKey,
+            url,
+            clerkId: user.clerkId,
+            uploadedByUserId: user._id,
+            courseId: args.courseId,
+            resourceGroupId: args.resourceGroupId?.trim() || undefined,
+            title,
+            description: args.description?.trim() || undefined,
             name: args.name,
             size: args.size,
         });
@@ -102,10 +169,128 @@ export const getCurrentUserFiles = query({
             fileKey: r.fileKey ?? undefined,
             url: r.url,
             clerkId: r.clerkId,
+            courseId: r.courseId ?? undefined,
+            resourceGroupId: r.resourceGroupId ?? undefined,
+            title: r.title ?? undefined,
+            description: r.description ?? undefined,
             name: r.name ?? undefined,
             size: r.size ?? undefined,
             uploadedAt: r.uploadedAt ?? undefined,
         }));
+    },
+});
+
+export const getManagedCourseFiles = query({
+    args: {
+        courseId: v.optional(v.id("courses")),
+    },
+    handler: async (ctx, args) => {
+        const user = await requireUser(ctx);
+
+        let files: Doc<"files">[] = [];
+
+        if (args.courseId) {
+            await requireCourseFileManager(ctx, args.courseId);
+            files = await ctx.db
+                .query("files")
+                .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))
+                .collect();
+        } else if (user.role === "admin") {
+            files = await ctx.db.query("files").collect();
+        } else if (user.role === "faculty") {
+            const courses = await ctx.db
+                .query("courses")
+                .withIndex("by_facultyId", (q) => q.eq("facultyId", user._id))
+                .collect();
+            const courseIds = new Set(courses.map((course) => course._id));
+            files = (await ctx.db.query("files").collect()).filter(
+                (file) => file.courseId && courseIds.has(file.courseId),
+            );
+        } else {
+            throw new Error("Forbidden");
+        }
+
+        const courses = await Promise.all(files.map((file) => file.courseId ? ctx.db.get(file.courseId) : null));
+        const uploaders = await Promise.all(files.map((file) => file.uploadedByUserId ? ctx.db.get(file.uploadedByUserId) : null));
+
+        return files
+            .map((file, index) => ({
+                ...file,
+                title: file.title ?? file.name ?? "Course resource",
+                course: courses[index]
+                    ? {
+                        _id: courses[index]!._id,
+                        courseCode: courses[index]!.courseCode,
+                        title: courses[index]!.title,
+                    }
+                    : null,
+                uploadedByName: uploaders[index]
+                    ? [uploaders[index]!.firstName, uploaders[index]!.lastName].filter(Boolean).join(" ") ||
+                        uploaders[index]!.email ||
+                        uploaders[index]!.clerkId
+                    : file.clerkId,
+            }))
+            .sort((left, right) => right.uploadedAt - left.uploadedAt);
+    },
+});
+
+export const getMyCourseFiles = query({
+    args: {},
+    handler: async (ctx) => {
+        const user = await requireUser(ctx);
+
+        const enrollments = await ctx.db
+            .query("enrollments")
+            .withIndex("by_studentId", (q) => q.eq("studentId", user._id))
+            .collect();
+
+        const rows = await Promise.all(
+            enrollments.map(async (enrollment) => {
+                const [course, files] = await Promise.all([
+                    ctx.db.get(enrollment.courseId),
+                    ctx.db
+                        .query("files")
+                        .withIndex("by_courseId", (q) => q.eq("courseId", enrollment.courseId))
+                        .collect(),
+                ]);
+
+                return files.map((file) => ({
+                    ...file,
+                    title: file.title ?? file.name ?? "Course resource",
+                    course: course
+                        ? {
+                            _id: course._id,
+                            courseCode: course.courseCode,
+                            title: course.title,
+                        }
+                        : null,
+                }));
+            }),
+        );
+
+        return rows.flat().sort((left, right) => right.uploadedAt - left.uploadedAt);
+    },
+});
+
+export const deleteCourseFile = mutation({
+    args: {
+        fileId: v.id("files"),
+    },
+    handler: async (ctx, args) => {
+        const file = await ctx.db.get(args.fileId);
+        if (!file) {
+            throw new Error("File not found");
+        }
+
+        if (!file.courseId) {
+            const user = await requireUser(ctx);
+            requireRole(user, ["admin"]);
+        } else {
+            await requireCourseFileManager(ctx, file.courseId);
+        }
+
+        await ctx.db.delete(args.fileId);
+        return { success: true };
     },
 });
 

@@ -46,9 +46,6 @@ export const getMyGrades = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    if (user.role !== "student" && user.role !== "admin") {
-      throw new Error("Only students or admins can view their own grades this way");
-    }
 
     const enrollments = await ctx.db
       .query("enrollments")
@@ -79,13 +76,22 @@ export const postMark = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    if (user.role !== "faculty") {
-      throw new Error("Only faculty can post marks");
+    if (user.role !== "faculty" && user.role !== "admin") {
+      throw new Error("Only faculty and admins can post marks");
     }
 
     const enrollment = await ctx.db.get(args.enrollmentId);
     if (!enrollment) {
       throw new Error("Enrollment not found");
+    }
+
+    const course = await ctx.db.get(enrollment.courseId);
+    if (!course) {
+      throw new Error("Course not found");
+    }
+
+    if (user.role !== "admin" && course.facultyId !== user._id) {
+      throw new Error("You can only post marks for your courses");
     }
 
     // Validate mark is not greater than maxMark
@@ -114,8 +120,8 @@ export const updateMark = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    if (user.role !== "faculty") {
-      throw new Error("Only faculty can update marks");
+    if (user.role !== "faculty" && user.role !== "admin") {
+      throw new Error("Only faculty and admins can update marks");
     }
 
     const grade = await ctx.db.get(args.gradeId);
@@ -123,7 +129,7 @@ export const updateMark = mutation({
       throw new Error("Grade not found");
     }
 
-    if (grade.facultyId !== user._id) {
+    if (user.role !== "admin" && grade.facultyId !== user._id) {
       throw new Error("You can only update marks you posted");
     }
 
@@ -194,8 +200,8 @@ export const upsertGradeForAdmin = mutation({
 
     const facultyId = args.facultyId ?? course.facultyId;
     const faculty = await ctx.db.get(facultyId);
-    if (!faculty || faculty.role !== "faculty") {
-      throw new Error("facultyId must point to a faculty user");
+    if (!faculty || (faculty.role !== "faculty" && faculty.role !== "admin")) {
+      throw new Error("facultyId must point to a faculty or admin user");
     }
 
     if (args.mark > args.maxMark) {
