@@ -30,7 +30,6 @@ const facultyNavItems: NavItem[] = [
   { label: "Grades & Marks", href: "/dashboard?tab=grades" },
   { label: "Assignments", href: "/dashboard?tab=assignments" },
   { label: "Student Enrollment", href: "/dashboard?tab=enrollments" },
-  { label: "Course Resources", href: "/dashboard/resources-management" },
 ];
 
 const adminNavItems: NavItem[] = [
