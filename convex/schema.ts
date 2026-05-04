@@ -97,6 +97,7 @@ export default defineSchema({
         userId: v.optional(v.id("users")),
         clerkId: v.optional(v.string()),
         accessType: v.union(v.literal("view"), v.literal("download")),
+        latencyMs: v.optional(v.number()),
         accessedAt: v.number(),
         userAgent: v.optional(v.string()),
         referrer: v.optional(v.string()),
@@ -105,6 +106,17 @@ export default defineSchema({
         .index("by_userId", ["userId"])
         .index("by_accessedAt", ["accessedAt"])
         .index("by_file_accessedAt", ["fileId", "accessedAt"]),
+
+    sessions: defineTable({
+        userId: v.id("users"),
+        clerkId: v.string(),
+        userAgent: v.optional(v.string()),
+        lastActiveAt: v.number(),
+        expiresAt: v.number(),
+    })
+        .index("by_userId", ["userId"])
+        .index("by_clerkId", ["clerkId"])
+        .index("by_expiresAt", ["expiresAt"]),
 
     searchQueryLogs: defineTable({
         query: v.string(),

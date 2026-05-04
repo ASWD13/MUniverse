@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import { requireRole } from "./lib/rbac";
+import { refreshSessionInternal } from "./sessions";
 
 const appRoleValue = v.union(
     v.literal("student"),
@@ -119,11 +120,13 @@ export const upsertUser = mutation({
                 updatedAt: Date.now(),
             });
 
+            await refreshSessionInternal(ctx, existing._id, identity.subject);
+
             return existing._id;
         }
 
         // 🆕 Create new user
-        return await ctx.db.insert("users", {
+        const userId = await ctx.db.insert("users", {
             clerkId: identity.subject,
             firstName,
             lastName,
@@ -135,6 +138,10 @@ export const upsertUser = mutation({
 
             updatedAt: Date.now(),
         });
+
+        await refreshSessionInternal(ctx, userId, identity.subject);
+
+        return userId;
     },
 });
 

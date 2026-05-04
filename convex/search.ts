@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/auth";
 import { requireRole } from "./lib/rbac";
+import { refreshSessionInternal } from "./sessions";
 
 export const logSearchQuery = mutation({
   args: {
@@ -30,6 +31,8 @@ export const logSearchQuery = mutation({
       clerkId: user.clerkId,
       searchedAt: Date.now(),
     });
+
+    await refreshSessionInternal(ctx, user._id, user.clerkId);
 
     return { success: true, id };
   },
