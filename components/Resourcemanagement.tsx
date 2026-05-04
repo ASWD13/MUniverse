@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -55,6 +56,9 @@ type UploadedCourseFile = {
   size?: number;
 };
 
+const MAX_FILES_PER_RESOURCE = 20;
+const MAX_RESOURCE_BYTES = 256 * 1024 * 1024;
+
 function formatDate(timestamp: number) {
   return new Date(timestamp).toLocaleString("en-IN", {
     dateStyle: "medium",
@@ -78,7 +82,8 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
 }
 
 export default function ResourceManagement() {
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const { isLoaded, isSignedIn } = useAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isLoaded && isSignedIn ? {} : "skip");
   const courses = useQuery(api.courses.getMyManagedCourses) as ManagedCourse[] | undefined;
   const storeCourseFile = useMutation(api.files.storeCourseFile);
   const deleteCourseFile = useMutation(api.files.deleteCourseFile);
@@ -187,6 +192,20 @@ export default function ResourceManagement() {
   const handleSelectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files ?? []);
     if (selectedFiles.length === 0) {
+      return;
+    }
+
+    const currentBytes = pendingUploads.reduce((sum, file) => sum + (file.size ?? 0), 0);
+    const selectedBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    if (pendingUploads.length + selectedFiles.length > MAX_FILES_PER_RESOURCE) {
+      setStatus(`A resource can include up to ${MAX_FILES_PER_RESOURCE} files.`);
+      event.target.value = "";
+      return;
+    }
+
+    if (currentBytes + selectedBytes > MAX_RESOURCE_BYTES) {
+      setStatus("A resource can include up to 256 MB total.");
+      event.target.value = "";
       return;
     }
 

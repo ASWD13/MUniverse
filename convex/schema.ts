@@ -34,6 +34,7 @@ export default defineSchema({
         title: v.string(),
         content: v.string(),
         authorId: v.id("users"),
+        courseId: v.optional(v.id("courses")),
         targetRoles: v.array(
             v.union(
                 v.literal("student"),
@@ -120,6 +121,14 @@ export default defineSchema({
         .index("by_surface", ["surface"])
         .index("by_userId", ["userId"]),
 
+    systemSettings: defineTable({
+        key: v.string(),
+        value: v.string(),
+        updatedAt: v.number(),
+        updatedBy: v.id("users"),
+    })
+        .index("by_key", ["key"]),
+
     courses: defineTable({
         courseCode: v.string(),
         title: v.string(),
@@ -179,6 +188,37 @@ export default defineSchema({
     .index("by_enrollmentId", ["enrollmentId"])
     .index("by_facultyId", ["facultyId"]),
 
+    attendanceSessions: defineTable({
+        courseId: v.id("courses"),
+        title: v.string(),
+        startsAt: v.number(),
+        durationMinutes: v.optional(v.number()),
+        createdBy: v.id("users"),
+        createdAt: v.number(),
+    })
+        .index("by_courseId", ["courseId"])
+        .index("by_startsAt", ["startsAt"]),
+
+    attendanceRecords: defineTable({
+        sessionId: v.id("attendanceSessions"),
+        enrollmentId: v.id("enrollments"),
+        studentId: v.id("users"),
+        courseId: v.id("courses"),
+        status: v.union(
+            v.literal("present"),
+            v.literal("absent"),
+            v.literal("late"),
+            v.literal("excused"),
+        ),
+        markedBy: v.id("users"),
+        markedAt: v.number(),
+    })
+        .index("by_sessionId", ["sessionId"])
+        .index("by_enrollmentId", ["enrollmentId"])
+        .index("by_studentId", ["studentId"])
+        .index("by_course_student", ["courseId", "studentId"])
+        .index("by_session_enrollment", ["sessionId", "enrollmentId"]),
+
     assignments: defineTable({
         courseId: v.id("courses"),
         title: v.string(),
@@ -193,4 +233,32 @@ export default defineSchema({
         .index("by_courseId", ["courseId"])
         .index("by_createdBy", ["createdBy"])
         .index("by_dueDate", ["dueDate"]),
+
+    assignmentSubmissions: defineTable({
+        assignmentId: v.id("assignments"),
+        courseId: v.id("courses"),
+        studentId: v.id("users"),
+        enrollmentId: v.id("enrollments"),
+        fileUrl: v.optional(v.string()),
+        fileName: v.optional(v.string()),
+        fileKey: v.optional(v.string()),
+        note: v.optional(v.string()),
+        status: v.union(
+            v.literal("submitted"),
+            v.literal("resubmitted"),
+            v.literal("reviewed"),
+            v.literal("late"),
+            v.literal("flagged"),
+        ),
+        allowResubmission: v.boolean(),
+        plagiarismFlag: v.boolean(),
+        feedback: v.optional(v.string()),
+        submittedAt: v.number(),
+        reviewedAt: v.optional(v.number()),
+        reviewedBy: v.optional(v.id("users")),
+    })
+        .index("by_assignmentId", ["assignmentId"])
+        .index("by_studentId", ["studentId"])
+        .index("by_enrollmentId", ["enrollmentId"])
+        .index("by_assignment_student", ["assignmentId", "studentId"]),
 });

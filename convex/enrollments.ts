@@ -101,6 +101,23 @@ export const getCourseRoster = query({
 export const getStudentEnrollments = query({
   args: { studentId: v.id("users") },
   handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (user.role !== "admin" && user._id !== args.studentId) {
+      const enrollmentsForTarget = await ctx.db
+        .query("enrollments")
+        .withIndex("by_studentId", (q) => q.eq("studentId", args.studentId))
+        .collect();
+      const managesAnyCourse = await Promise.all(
+        enrollmentsForTarget.map(async (enrollment) => {
+          const course = await ctx.db.get(enrollment.courseId);
+          return course?.facultyId === user._id;
+        }),
+      );
+      if (!managesAnyCourse.some(Boolean)) {
+        throw new Error("Forbidden");
+      }
+    }
+
     const enrollments = await ctx.db
       .query("enrollments")
       .withIndex("by_studentId", (q) => q.eq("studentId", args.studentId))
@@ -134,10 +151,20 @@ export const getMyAttendance = query({
     const result = await Promise.all(
       enrollments.map(async (enrollment) => {
         const course = await ctx.db.get(enrollment.courseId);
+        const records = await ctx.db
+          .query("attendanceRecords")
+          .withIndex("by_enrollmentId", (q) => q.eq("enrollmentId", enrollment._id))
+          .collect();
+        const counted = records.filter((record) => record.status !== "excused");
+        const attended = counted.filter((record) => record.status === "present" || record.status === "late").length;
+        const calculatedPercentage = counted.length > 0 ? Math.round((attended / counted.length) * 100) : null;
+
         return {
           course: course?.title || "Unknown Course",
           courseCode: course?.courseCode || "",
-          percentage: enrollment.attendancePercentage || 0,
+          percentage: calculatedPercentage ?? enrollment.attendancePercentage ?? 0,
+          attended,
+          total: counted.length,
           threshold: 75,
         };
       })
@@ -339,11 +366,15 @@ export const bulkEnrollByRollNumbers = mutation({
       notUsers: [] as string[],
     };
 
+    const allUsers = await ctx.db.query("users").collect();
+
     for (const roll of normalizedRolls) {
-      const student = await ctx.db
-        .query("users")
-        .withIndex("by_enrollmentNumber", (q) => q.eq("enrollmentNumber", roll))
-        .first();
+      const student = allUsers.find((candidate) =>
+        candidate.enrollmentNumber?.toLowerCase() === roll ||
+        candidate.email?.toLowerCase() === roll ||
+        candidate.employeeId?.toLowerCase() === roll ||
+        candidate.clerkId.toLowerCase() === roll,
+      );
 
       if (!student) {
         result.missing.push(roll);
@@ -369,6 +400,208 @@ export const bulkEnrollByRollNumbers = mutation({
         enrolledAt: Date.now(),
       });
       result.added.push(roll);
+    }
+
+    return result;
+  },
+});
+
+export const createAttendanceSession = mutation({
+  args: {
+    courseId: v.id("courses"),
+    title: v.string(),
+    startsAt: v.number(),
+    durationMinutes: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdminOrAssignedFaculty(ctx, args.courseId);
+    const title = args.title.trim();
+    if (!title) throw new Error("Session title is required");
+
+    const id = await ctx.db.insert("attendanceSessions", {
+      courseId: args.courseId,
+      title,
+      startsAt: args.startsAt,
+      durationMinutes: args.durationMinutes,
+      createdBy: user._id,
+      createdAt: Date.now(),
+    });
+
+    return { id };
+  },
+});
+
+export const getAttendanceSessionsByCourse = query({
+  args: { courseId: v.id("courses") },
+  handler: async (ctx, args) => {
+    await requireAdminOrAssignedFaculty(ctx, args.courseId);
+    return await ctx.db
+      .query("attendanceSessions")
+      .withIndex("by_courseId", (q) => q.eq("courseId", args.courseId))
+      .collect();
+  },
+});
+
+export const getAttendanceRoster = query({
+  args: { sessionId: v.id("attendanceSessions") },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Attendance session not found");
+    await requireAdminOrAssignedFaculty(ctx, session.courseId);
+
+    const [enrollments, records] = await Promise.all([
+      ctx.db
+        .query("enrollments")
+        .withIndex("by_courseId", (q) => q.eq("courseId", session.courseId))
+        .collect(),
+      ctx.db
+        .query("attendanceRecords")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
+        .collect(),
+    ]);
+
+    const recordByEnrollmentId = new Map(records.map((record) => [record.enrollmentId, record]));
+
+    const rows = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const student = await ctx.db.get(enrollment.studentId);
+        return {
+          enrollment,
+          student: student
+            ? {
+                _id: student._id,
+                fullName: [student.firstName, student.lastName].filter(Boolean).join(" ") || student.email || student.clerkId,
+                email: student.email,
+                enrollmentNumber: student.enrollmentNumber ?? null,
+                role: student.role,
+              }
+            : null,
+          record: recordByEnrollmentId.get(enrollment._id) ?? null,
+        };
+      }),
+    );
+
+    return { session, rows };
+  },
+});
+
+export const markAttendance = mutation({
+  args: {
+    sessionId: v.id("attendanceSessions"),
+    enrollmentId: v.id("enrollments"),
+    status: v.union(
+      v.literal("present"),
+      v.literal("absent"),
+      v.literal("late"),
+      v.literal("excused"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Attendance session not found");
+    const { user } = await requireAdminOrAssignedFaculty(ctx, session.courseId);
+    const enrollment = await ctx.db.get(args.enrollmentId);
+    if (!enrollment || enrollment.courseId !== session.courseId) {
+      throw new Error("Enrollment not found for this session");
+    }
+
+    const existing = await ctx.db
+      .query("attendanceRecords")
+      .withIndex("by_session_enrollment", (q) =>
+        q.eq("sessionId", args.sessionId).eq("enrollmentId", args.enrollmentId),
+      )
+      .first();
+
+    const recordData = {
+      sessionId: args.sessionId,
+      enrollmentId: args.enrollmentId,
+      studentId: enrollment.studentId,
+      courseId: session.courseId,
+      status: args.status,
+      markedBy: user._id,
+      markedAt: Date.now(),
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, recordData);
+      return { id: existing._id, created: false };
+    }
+
+    const id = await ctx.db.insert("attendanceRecords", recordData);
+    return { id, created: true };
+  },
+});
+
+export const importAttendanceCsv = mutation({
+  args: {
+    sessionId: v.id("attendanceSessions"),
+    rows: v.array(v.object({
+      identifier: v.string(),
+      status: v.union(
+        v.literal("present"),
+        v.literal("absent"),
+        v.literal("late"),
+        v.literal("excused"),
+      ),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Attendance session not found");
+    const { user } = await requireAdminOrAssignedFaculty(ctx, session.courseId);
+
+    const result = { marked: 0, missing: [] as string[] };
+    for (const row of args.rows) {
+      const identifier = row.identifier.trim().toLowerCase();
+      if (!identifier) continue;
+
+      const users = await ctx.db.query("users").collect();
+      const student = users.find((candidate) =>
+        candidate.enrollmentNumber?.toLowerCase() === identifier ||
+        candidate.email?.toLowerCase() === identifier ||
+        candidate.employeeId?.toLowerCase() === identifier,
+      );
+
+      if (!student) {
+        result.missing.push(identifier);
+        continue;
+      }
+
+      const enrollment = await ctx.db
+        .query("enrollments")
+        .withIndex("by_course_student", (q) =>
+          q.eq("courseId", session.courseId).eq("studentId", student._id),
+        )
+        .first();
+
+      if (!enrollment) {
+        result.missing.push(identifier);
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("attendanceRecords")
+        .withIndex("by_session_enrollment", (q) =>
+          q.eq("sessionId", args.sessionId).eq("enrollmentId", enrollment._id),
+        )
+        .first();
+
+      const recordData = {
+        sessionId: args.sessionId,
+        enrollmentId: enrollment._id,
+        studentId: student._id,
+        courseId: session.courseId,
+        status: row.status,
+        markedBy: user._id,
+        markedAt: Date.now(),
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, recordData);
+      } else {
+        await ctx.db.insert("attendanceRecords", recordData);
+      }
+      result.marked += 1;
     }
 
     return result;

@@ -1,5 +1,7 @@
 import Sessionmanagement from "@/components/Sessionmanagement";
+import { requireDashboardRole } from "../requireRole";
 
-export default function SessionManagementPage() {
+export default async function SessionManagementPage() {
+  await requireDashboardRole(["admin"]);
   return <Sessionmanagement />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import MainLayout from "./MainLayout";
 import { useState } from "react";
@@ -15,8 +15,9 @@ function formatRole(role: string | null | undefined) {
 }
 
 export default function ProfilePage() {
+  const { isLoaded, isSignedIn } = useAuth();
   const { user: clerkUser } = useUser();
-  const user = useQuery(api.users.getCurrentUser);
+  const user = useQuery(api.users.getCurrentUser, isLoaded && isSignedIn ? {} : "skip");
   const updatePreferences = useMutation(api.users.updatePreferences);
   const updateProfile = useMutation(api.users.updateProfile);
   
@@ -26,7 +27,7 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
-  if (user === undefined || !user.isSynced) {
+  if (user === undefined || !user?.isSynced) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
         <p className="text-sm text-zinc-300">Loading profile...</p>

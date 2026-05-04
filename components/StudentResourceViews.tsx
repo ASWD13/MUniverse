@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { useUploadThing } from "@/utils/uploadthing";
 import MainLayout from "./MainLayout";
 
 type PlannerSlot = {
@@ -65,6 +67,184 @@ function StudentResourceShell(props: StudentResourceShellProps) {
   );
 }
 
+type StudentAssignmentCardProps = {
+  assignment: {
+    _id: Id<"assignments">;
+    title: string;
+    course: string;
+    dueDate: number;
+    maxMarks: number;
+    description?: string;
+    fileUrl?: string;
+    fileName?: string;
+  };
+  submission?: {
+    status: "submitted" | "resubmitted" | "reviewed" | "late" | "flagged";
+    submittedAt: number;
+    feedback?: string;
+    fileUrl?: string;
+    fileName?: string;
+    allowResubmission: boolean;
+    plagiarismFlag: boolean;
+  };
+  onDownloadAssignment: (url: string, fileName: string) => void;
+};
+
+function StudentAssignmentCard({ assignment, submission, onDownloadAssignment }: StudentAssignmentCardProps) {
+  const submitAssignment = useMutation(api.assignments.submitAssignment);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [note, setNote] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { startUpload } = useUploadThing("assignmentSubmissionUploader", {
+    uploadProgressGranularity: "fine",
+    onUploadProgress: (nextProgress) => setProgress(nextProgress),
+    onUploadError: (error) => setMessage(error.message),
+  });
+
+  const canSubmit = !submission || submission.allowResubmission;
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!canSubmit) {
+      setMessage("Resubmission is not enabled for this assignment.");
+      return;
+    }
+
+    if (!selectedFile && !note.trim()) {
+      setMessage("Choose a file or add a note before submitting.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setProgress(selectedFile ? 1 : 100);
+    setMessage(null);
+
+    try {
+      let uploadedFile:
+        | {
+            ufsUrl?: string;
+            url?: string;
+            key?: string;
+            name?: string;
+          }
+        | undefined;
+
+      if (selectedFile) {
+        const uploaded = await startUpload([selectedFile]);
+        uploadedFile = uploaded?.[0];
+      }
+
+      const fileUrl = uploadedFile?.ufsUrl ?? uploadedFile?.url;
+
+      await submitAssignment({
+        assignmentId: assignment._id,
+        fileUrl,
+        fileName: uploadedFile?.name ?? selectedFile?.name,
+        fileKey: uploadedFile?.key,
+        note: note.trim() || undefined,
+      });
+
+      setSelectedFile(null);
+      setNote("");
+      setProgress(100);
+      setMessage("Submission saved.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to submit assignment.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <li className="rounded-lg border border-white/15 bg-white/5 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">{assignment.title}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.08em] text-zinc-400">{assignment.course}</p>
+        </div>
+        <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase text-zinc-200">
+          {submission?.status ?? "pending"}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-300">
+        <span>Due: {new Date(assignment.dueDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span>
+        <span>Weightage: {assignment.maxMarks} marks</span>
+      </div>
+      {assignment.description ? <p className="mt-3 text-sm text-zinc-400">{assignment.description}</p> : null}
+      {assignment.fileUrl ? (
+        <a
+          href={assignment.fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => onDownloadAssignment(assignment.fileUrl!, assignment.fileName || assignment.title)}
+          className="mt-3 inline-block text-xs text-blue-400 transition-colors hover:text-blue-300"
+        >
+          Download Attached File ({assignment.fileName || "Attachment"})
+        </a>
+      ) : null}
+
+      {submission ? (
+        <div className="mt-4 rounded-md border border-white/10 bg-black/20 p-3 text-xs text-zinc-300">
+          Submitted {new Date(submission.submittedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+          {submission.fileUrl ? (
+            <a
+              href={submission.fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 font-semibold text-zinc-100 hover:text-white"
+            >
+              Open submission
+            </a>
+          ) : null}
+          {submission.feedback ? <p className="mt-2 text-zinc-400">Feedback: {submission.feedback}</p> : null}
+          {submission.plagiarismFlag ? <p className="mt-2 font-semibold text-red-300">Flagged for review</p> : null}
+        </div>
+      ) : null}
+
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <label className="block space-y-1">
+          <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Submission file</span>
+          <input
+            type="file"
+            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+            disabled={!canSubmit || isSubmitting}
+            className="block w-full cursor-pointer rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-zinc-200 file:mr-3 file:rounded-md file:border-0 file:bg-white/15 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
+        {selectedFile ? <p className="text-xs text-zinc-400">Ready: {selectedFile.name}</p> : null}
+        <label className="block space-y-1">
+          <span className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">Note</span>
+          <textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={2}
+            disabled={!canSubmit || isSubmitting}
+            placeholder="Optional submission note"
+            className="w-full resize-none rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-white/45 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
+        {isSubmitting ? (
+          <div className="h-2 overflow-hidden rounded-full bg-white/15">
+            <div className="h-full rounded-full bg-white transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        ) : null}
+        {message ? <p className="text-xs text-zinc-300">{message}</p> : null}
+        <button
+          type="submit"
+          disabled={!canSubmit || isSubmitting}
+          className="rounded-md border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? "Submitting..." : canSubmit ? "Submit assignment" : "Submitted"}
+        </button>
+      </form>
+    </li>
+  );
+}
+
 export function StudentPlannerView() {
   const myEnrollments = useQuery(api.enrollments.getMyEnrollments, {});
   const courseSlots = (myEnrollments ?? []).flatMap((enrollment) => {
@@ -104,14 +284,8 @@ export function StudentPlannerView() {
 
 export function StudentAssignmentsView() {
   const myAssignments = useQuery(api.assignments.getMyAssignments);
+  const mySubmissions = useQuery(api.assignments.getMySubmissions);
   const logResourceAccess = useMutation(api.files.logResourceAccess);
-
-  function formatDateFriendly(timestamp: number) {
-    return new Date(timestamp).toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  }
 
   return (
     <StudentResourceShell
@@ -119,49 +293,29 @@ export function StudentAssignmentsView() {
       title="Assignment Center"
       description="Track every submission with due date, status, and expected weightage."
     >
-      {myAssignments === undefined ? (
+      {myAssignments === undefined || mySubmissions === undefined ? (
          <p className="text-sm text-zinc-400">Loading assignments...</p>
       ) : myAssignments.length === 0 ? (
          <p className="text-sm text-zinc-400">No active assignments found.</p>
       ) : (
       <ul className="space-y-3">
-        {myAssignments.map((assignment) => (
-          <li key={assignment._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">{assignment.title}</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.08em] text-zinc-400">{assignment.course}</p>
-              </div>
-              <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase text-zinc-200">
-                Pending
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-300">
-              <span>Due: {formatDateFriendly(assignment.dueDate)}</span>
-              <span>Weightage: {assignment.maxMarks} marks</span>
-            </div>
-            {assignment.description && (
-              <p className="mt-3 text-sm text-zinc-400">{assignment.description}</p>
-            )}
-            {assignment.fileUrl && (
-               <a
-                 href={assignment.fileUrl}
-                 target="_blank"
-                 rel="noopener noreferrer"
-                 onClick={() => {
-                   void logResourceAccess({
-                     url: assignment.fileUrl,
-                     fileName: assignment.fileName || assignment.title,
-                     accessType: "download",
-                   });
-                 }}
-                 className="mt-3 text-xs text-blue-400 hover:text-blue-300 transition-colors inline-block"
-               >
-                 Download Attached File ({assignment.fileName || "Attachment"})
-               </a>
-            )}
-          </li>
-        ))}
+        {myAssignments.map((assignment) => {
+          const submission = mySubmissions.find((item) => item.assignmentId === assignment._id);
+          return (
+            <StudentAssignmentCard
+              key={assignment._id}
+              assignment={assignment}
+              submission={submission}
+              onDownloadAssignment={(url, fileName) => {
+                void logResourceAccess({
+                  url,
+                  fileName,
+                  accessType: "download",
+                });
+              }}
+            />
+          );
+        })}
       </ul>
       )}
     </StudentResourceShell>
@@ -277,6 +431,39 @@ export function StudentResourcesView() {
     (res.course?.courseCode ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     (res.course?.title ?? "").toLowerCase().includes(searchQuery.toLowerCase())
   );
+  type CourseFile = NonNullable<typeof courseFiles>[number];
+  type ResourceGroup = {
+    id: string;
+    title: string;
+    description?: string;
+    courseCode: string;
+    courseTitle: string;
+    files: CourseFile[];
+    latestUploadedAt: number;
+  };
+  const groupedResources = Object.values(
+    filteredResources.reduce<Record<string, ResourceGroup>>((groups, resource) => {
+      const id = resource.resourceGroupId ?? String(resource._id);
+      const existing = groups[id];
+
+      if (existing) {
+        existing.files.push(resource);
+        existing.latestUploadedAt = Math.max(existing.latestUploadedAt, resource.uploadedAt ?? 0);
+        return groups;
+      }
+
+      groups[id] = {
+        id,
+        title: resource.title ?? resource.name ?? "Course resource",
+        description: resource.description ?? undefined,
+        courseCode: resource.course?.courseCode ?? "Course",
+        courseTitle: resource.course?.title ?? "Course material",
+        files: [resource],
+        latestUploadedAt: resource.uploadedAt ?? 0,
+      };
+      return groups;
+    }, {}),
+  ).sort((left, right) => right.latestUploadedAt - left.latestUploadedAt);
 
   useEffect(() => {
     const trimmedQuery = searchQuery.trim();
@@ -329,33 +516,40 @@ export function StudentResourcesView() {
         <div className="py-10 text-center text-zinc-400">
           <p>Loading course materials...</p>
         </div>
-      ) : filteredResources.length === 0 ? (
+      ) : groupedResources.length === 0 ? (
         <div className="py-10 text-center text-zinc-400">
           <p>No materials found matching &quot;{searchQuery}&quot;.</p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {filteredResources.map((resource) => (
-            <article key={resource._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
+          {groupedResources.map((resource) => (
+            <article key={resource.id} className="rounded-lg border border-white/15 bg-white/5 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
-                {resource.course?.courseCode ?? "Course"}
+                {resource.courseCode} · {resource.courseTitle}
               </p>
-              <p className="mt-2 text-sm font-semibold text-white">{resource.title ?? resource.name ?? "Course resource"}</p>
+              <p className="mt-2 text-sm font-semibold text-white">{resource.title}</p>
               {resource.description ? <p className="mt-2 text-sm text-zinc-300">{resource.description}</p> : null}
-              <a
-                href={resource.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => {
-                  void logResourceAccess({
-                    fileId: resource._id,
-                    accessType: "view",
-                  });
-                }}
-                className="mt-4 inline-flex rounded-md border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
-              >
-                Open resource
-              </a>
+              <ul className="mt-4 space-y-2">
+                {resource.files.map((file) => (
+                  <li key={file._id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                    <span className="min-w-0 truncate text-xs text-zinc-300">{file.name ?? file.title ?? "File"}</span>
+                    <a
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        void logResourceAccess({
+                          fileId: file._id,
+                          accessType: "view",
+                        });
+                      }}
+                      className="rounded-md border border-white/20 bg-white/8 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-200 transition hover:bg-white/14"
+                    >
+                      Open
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </article>
           ))}
         </div>

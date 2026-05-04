@@ -127,11 +127,15 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
   const freshCount = announcements?.filter((item) => Date.now() - item.updatedAt <= todayWindow).length ?? 0;
   const nextUnread = announcements?.find((item) => !item.isRead) ?? null;
   const myAssignments = useQuery(api.assignments.getMyAssignments);
+  const mySubmissions = useQuery(api.assignments.getMySubmissions);
   const myAttendance = useQuery(api.enrollments.getMyAttendance);
   const myEnrollments = useQuery(api.enrollments.getMyEnrollments, {});
   const myCourseFiles = useQuery(api.files.getMyCourseFiles, {});
 
-  const pendingAssignments = myAssignments?.length ?? 0;
+  const pendingAssignments = myAssignments?.filter((assignment) => {
+    const submission = mySubmissions?.find((item) => item.assignmentId === assignment._id);
+    return !submission || submission.status !== "reviewed";
+  }).length ?? 0;
   const averageAttendance = myAttendance && myAttendance.length > 0 
     ? Math.round(myAttendance.reduce((sum, record) => sum + record.percentage, 0) / myAttendance.length)
     : 0;
@@ -150,7 +154,32 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
     }));
   });
   const visiblePlannerSlots = timetableSlots.length > 0 ? timetableSlots : plannerSlots;
-  const resourceCount = myCourseFiles?.length ?? 0;
+  type CourseFile = NonNullable<typeof myCourseFiles>[number];
+  const resourceEntries = Object.values(
+    (myCourseFiles ?? []).reduce<Record<string, { id: string; title: string; description?: string; courseCode: string; files: CourseFile[]; latestUploadedAt: number }>>(
+      (groups, resource) => {
+        const id = resource.resourceGroupId ?? String(resource._id);
+        const existing = groups[id];
+        if (existing) {
+          existing.files.push(resource);
+          existing.latestUploadedAt = Math.max(existing.latestUploadedAt, resource.uploadedAt ?? 0);
+          return groups;
+        }
+
+        groups[id] = {
+          id,
+          title: resource.title ?? resource.name ?? "Course resource",
+          description: resource.description ?? undefined,
+          courseCode: resource.course?.courseCode ?? "Course",
+          files: [resource],
+          latestUploadedAt: resource.uploadedAt ?? 0,
+        };
+        return groups;
+      },
+      {},
+    ),
+  ).sort((left, right) => right.latestUploadedAt - left.latestUploadedAt);
+  const resourceCount = resourceEntries.length;
 
   const featureOptions: FeatureOption[] = [
     {
@@ -266,9 +295,14 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
                     <p className="text-sm font-semibold text-white">{item.title}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.08em] text-zinc-400">{item.course}</p>
                   </div>
-                  <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase text-zinc-200">
-                    Pending
-                  </span>
+                  {(() => {
+                    const submission = mySubmissions?.find((entry) => entry.assignmentId === item._id);
+                    return (
+                      <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase text-zinc-200">
+                        {submission?.status ?? "pending"}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <p className="mt-3 text-sm text-zinc-300">Due: {formatDate(item.dueDate)}</p>
               </li>
@@ -365,20 +399,23 @@ export default function StudentDashboard({ viewerName }: StudentDashboardProps) 
           <p className="mt-5 text-sm text-zinc-400">No course files have been uploaded for your enrolled courses yet.</p>
         ) : (
           <ul className="mt-5 grid gap-3 md:grid-cols-3">
-            {myCourseFiles.slice(0, 6).map((resource) => (
-              <li key={resource._id} className="rounded-lg border border-white/15 bg-white/5 p-4">
+            {resourceEntries.slice(0, 6).map((resource) => (
+              <li key={resource.id} className="rounded-lg border border-white/15 bg-white/5 p-4">
                 <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-400">
-                  {resource.course?.courseCode ?? "Course"}
+                  {resource.courseCode}
                 </p>
-                <p className="mt-2 text-sm font-semibold text-white">{resource.title ?? resource.name ?? "Course resource"}</p>
+                <p className="mt-2 text-sm font-semibold text-white">{resource.title}</p>
                 {resource.description ? <p className="mt-2 text-sm text-zinc-300">{resource.description}</p> : null}
+                <p className="mt-2 text-xs text-zinc-400">
+                  {resource.files.length} file{resource.files.length === 1 ? "" : "s"}
+                </p>
                 <a
-                  href={resource.url}
+                  href={resource.files[0]?.url ?? "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-4 inline-flex text-xs font-semibold uppercase tracking-[0.08em] text-zinc-200 hover:text-white"
                 >
-                  Open
+                  Open first file
                 </a>
               </li>
             ))}

@@ -146,7 +146,7 @@ export const getCurrentUser = query({
     handler: async (ctx) => {
         const identity = await ctx.auth.getUserIdentity();
         if (!identity) {
-            throw new Error("Not authenticated");
+            return null;
         }
 
         const claims = identity as Record<string, unknown>;
@@ -216,8 +216,19 @@ export const getCurrentUser = query({
 export const listUsersForAdmin = query({
     args: {},
     handler: async (ctx) => {
-        const currentUser = await requireUser(ctx);
-        requireRole(currentUser, ["admin"]);
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) {
+            return [];
+        }
+
+        const currentUser = await ctx.db
+            .query("users")
+            .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+            .unique();
+
+        if (!currentUser || currentUser.role !== "admin") {
+            return [];
+        }
 
         const users = await ctx.db.query("users").collect();
 
@@ -316,5 +327,94 @@ export const updateProfile = mutation({
         });
 
         return { success: true };
+    },
+});
+
+export const getSessionPolicyForAdmin = query({
+    args: {},
+    handler: async (ctx) => {
+        const currentUser = await requireUser(ctx);
+        requireRole(currentUser, ["admin"]);
+
+        const setting = await ctx.db
+            .query("systemSettings")
+            .withIndex("by_key", (q) => q.eq("key", "sessionPolicy"))
+            .first();
+
+        if (!setting) {
+            return {
+                idleTimeoutMinutes: 30,
+                tokenExpiryHours: 24,
+                maxConcurrentSessions: 3,
+                sharedWarning: true,
+                autoLogout: true,
+                rememberDevice: false,
+                updatedAt: null,
+            };
+        }
+
+        try {
+            return {
+                ...JSON.parse(setting.value),
+                updatedAt: setting.updatedAt,
+            };
+        } catch {
+            return {
+                idleTimeoutMinutes: 30,
+                tokenExpiryHours: 24,
+                maxConcurrentSessions: 3,
+                sharedWarning: true,
+                autoLogout: true,
+                rememberDevice: false,
+                updatedAt: setting.updatedAt,
+            };
+        }
+    },
+});
+
+export const updateSessionPolicyForAdmin = mutation({
+    args: {
+        idleTimeoutMinutes: v.number(),
+        tokenExpiryHours: v.number(),
+        maxConcurrentSessions: v.number(),
+        sharedWarning: v.boolean(),
+        autoLogout: v.boolean(),
+        rememberDevice: v.boolean(),
+    },
+    handler: async (ctx, args) => {
+        const currentUser = await requireUser(ctx);
+        requireRole(currentUser, ["admin"]);
+
+        const value = JSON.stringify({
+            idleTimeoutMinutes: Math.max(5, Math.min(120, args.idleTimeoutMinutes)),
+            tokenExpiryHours: Math.max(1, Math.min(72, args.tokenExpiryHours)),
+            maxConcurrentSessions: Math.max(1, Math.min(10, args.maxConcurrentSessions)),
+            sharedWarning: args.sharedWarning,
+            autoLogout: args.autoLogout,
+            rememberDevice: args.rememberDevice,
+        });
+
+        const existing = await ctx.db
+            .query("systemSettings")
+            .withIndex("by_key", (q) => q.eq("key", "sessionPolicy"))
+            .first();
+
+        if (existing) {
+            await ctx.db.patch(existing._id, {
+                value,
+                updatedAt: Date.now(),
+                updatedBy: currentUser._id,
+            });
+            return { id: existing._id, created: false };
+        }
+
+        const id = await ctx.db.insert("systemSettings", {
+            key: "sessionPolicy",
+            value,
+            updatedAt: Date.now(),
+            updatedBy: currentUser._id,
+        });
+
+        return { id, created: true };
     },
 });

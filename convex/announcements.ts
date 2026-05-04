@@ -26,6 +26,7 @@ type CreateAnnouncementArgs = {
     title: string;
     content: string;
     targetRoles: AppRole[];
+    courseId?: Id<"courses">;
 };
 
 type MarkAnnouncementReadArgs = {
@@ -75,10 +76,22 @@ export async function createAnnouncementHandler(
     const content = requireNonEmptyTrimmed(args.content, "content");
     const targetRoles = normalizeTargetRoles(args.targetRoles);
 
+    if (args.courseId) {
+        const course = await ctx.db.get(args.courseId);
+        if (!course) {
+            throw new Error("Course not found");
+        }
+
+        if (user.role !== "admin" && course.facultyId !== user._id) {
+            throw new Error("You can only post announcements for your courses");
+        }
+    }
+
     const announcementId = await ctx.db.insert("announcements", {
         title,
         content,
         authorId: user._id,
+        courseId: args.courseId,
         targetRoles,
         updatedAt: Date.now(),
     });
@@ -112,13 +125,41 @@ export async function getAnnouncementsHandler(ctx: QueryCtx) {
         readAtByAnnouncementId.set(read.announcementId, read.readAt);
     }
 
-    return announcements
-        .filter((announcement) => announcement.targetRoles.includes(user.role))
-        .map((announcement) => ({
+    const visibleAnnouncements = [];
+
+    for (const announcement of announcements) {
+        if (!announcement.targetRoles.includes(user.role)) {
+            continue;
+        }
+
+        if (announcement.courseId) {
+            const course = await ctx.db.get(announcement.courseId);
+            if (!course) {
+                continue;
+            }
+
+            if (user.role !== "admin" && course.facultyId !== user._id) {
+                const enrollment = await ctx.db
+                    .query("enrollments")
+                    .withIndex("by_course_student", (q) =>
+                        q.eq("courseId", announcement.courseId!).eq("studentId", user._id),
+                    )
+                    .first();
+
+                if (!enrollment) {
+                    continue;
+                }
+            }
+        }
+
+        visibleAnnouncements.push({
             ...announcement,
             isRead: readAtByAnnouncementId.has(announcement._id),
             readAt: readAtByAnnouncementId.get(announcement._id) ?? null,
-        }));
+        });
+    }
+
+    return visibleAnnouncements;
 }
 
 export async function markAnnouncementReadHandler(
@@ -208,6 +249,7 @@ export const createAnnouncement = mutation({
     args: {
         title: v.string(),
         content: v.string(),
+        courseId: v.optional(v.id("courses")),
         targetRoles: v.array(roleValue),
     },
     handler: createAnnouncementHandler,
@@ -235,7 +277,19 @@ export const deleteAnnouncement = mutation({
 export const getNotifications = query({
     args: {},
     handler: async (ctx) => {
-        const user = await requireUser(ctx);
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) {
+            return [];
+        }
+
+        const user = await ctx.db
+            .query("users")
+            .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+            .unique();
+
+        if (!user) {
+            return [];
+        }
 
         return await ctx.db
             .query("notifications")

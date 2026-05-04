@@ -1,5 +1,7 @@
 import UsageReports from "@/components/UsageReports";
+import { requireDashboardRole } from "../requireRole";
 
-export default function UsageReportsPage() {
+export default async function UsageReportsPage() {
+  await requireDashboardRole(["admin"]);
   return <UsageReports />;
 }

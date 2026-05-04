@@ -1,13 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
 export default function NotificationBell() {
+  const { isLoaded, isSignedIn } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const notifications = useQuery(api.announcements.getNotifications);
+  const notifications = useQuery(
+    api.announcements.getNotifications,
+    isLoaded && isSignedIn ? {} : "skip",
+  );
   const markRead = useMutation(api.announcements.markNotificationRead);
   const clearAll = useMutation(api.announcements.clearAllNotifications);
 
@@ -22,6 +27,7 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        disabled={!isLoaded || !isSignedIn}
         className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-white/5 text-zinc-300 transition hover:bg-white/10 active:bg-white/16"
       >
         <svg
