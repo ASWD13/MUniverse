@@ -325,9 +325,8 @@ export default function CourseManagement() {
                   setFacultyId(faculty._id);
                   setFacultySearch(faculty.fullName);
                 }}
-                className={`rounded-md border px-3 py-2 text-left text-xs transition ${
-                  facultyId === faculty._id ? "border-white/45 bg-white/18 text-white" : "border-white/15 bg-white/5 text-zinc-300 hover:bg-white/10"
-                }`}
+                className={`rounded-md border px-3 py-2 text-left text-xs transition ${facultyId === faculty._id ? "border-white/45 bg-white/18 text-white" : "border-white/15 bg-white/5 text-zinc-300 hover:bg-white/10"
+                  }`}
               >
                 <span className="block truncate font-semibold">{faculty.fullName}</span>
                 <span className="block truncate text-zinc-400">
@@ -392,7 +391,7 @@ export default function CourseManagement() {
             <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
               {courses === undefined ? "Loading courses" : `${courses.length} courses`}
             </p>
-            <ul className="mt-3 max-h-[28rem] space-y-3 overflow-y-auto pr-1">
+            <ul className="mt-3 max-h-112 space-y-3 overflow-y-auto pr-1">
               {(courses ?? []).map((course) => (
                 <li key={course._id} className={`rounded-lg border p-4 ${selectedCourseId === course._id ? "border-white/35 bg-white/12" : "border-white/15 bg-black/20"}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -462,9 +461,8 @@ export default function CourseManagement() {
                         setStudentId(student._id);
                         setStudentSearch(student.fullName);
                       }}
-                      className={`rounded-md border px-3 py-2 text-left text-xs transition ${
-                        studentId === student._id ? "border-white/45 bg-white/18 text-white" : "border-white/15 bg-black/20 text-zinc-300 hover:bg-white/10"
-                      }`}
+                      className={`rounded-md border px-3 py-2 text-left text-xs transition ${studentId === student._id ? "border-white/45 bg-white/18 text-white" : "border-white/15 bg-black/20 text-zinc-300 hover:bg-white/10"
+                        }`}
                     >
                       <span className="block truncate font-semibold">{student.fullName}</span>
                       <span className="block truncate text-zinc-400">
